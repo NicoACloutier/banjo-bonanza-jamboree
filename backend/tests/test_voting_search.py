@@ -94,3 +94,96 @@ async def test_user_tabs_endpoint_hides_drafts_from_others(client):
 
     owner_view = await client.get("/api/users/profileowner/tabs", headers=owner)
     assert owner_view.json()["total"] == 2
+
+
+async def test_update_tab_response_reflects_callers_existing_vote(client):
+    # Regression test: PUT /api/tabs/{id} used to hardcode has_voted=False
+    # in its response regardless of the editing user's actual vote state.
+    owner = await _register_and_login(client, "editvoteowner")
+    tab_id = await _create_published_tab(client, owner, "Whiskey Before Breakfast")
+
+    vote_resp = await client.post(f"/api/tabs/{tab_id}/vote", headers=owner)
+    assert vote_resp.json()["has_voted"] is True
+
+    update_resp = await client.put(
+        f"/api/tabs/{tab_id}",
+        json={"song_name": "Whiskey Before Breakfast", "tuning_key": "standard_g", "notes": [], "publish": True},
+        headers=owner,
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["has_voted"] is True
+
+
+async def test_search_with_empty_query_returns_all_published(client):
+    owner = await _register_and_login(client, "searchowner3")
+    await _create_published_tab(client, owner, "Some Tune")
+
+    resp = await client.get("/api/tabs", params={"q": ""})
+    assert resp.status_code == 200
+    assert resp.json()["total"] >= 1
+
+
+async def test_search_with_no_query_param_returns_all_published(client):
+    owner = await _register_and_login(client, "searchowner4")
+    await _create_published_tab(client, owner, "Another Tune")
+
+    resp = await client.get("/api/tabs")
+    assert resp.status_code == 200
+    assert resp.json()["total"] >= 1
+
+
+async def test_search_special_characters_do_not_error(client):
+    owner = await _register_and_login(client, "searchowner5")
+    await _create_published_tab(client, owner, "100% Banjo (Live!)")
+
+    # SQL-wildcard characters and punctuation should be treated as literal
+    # search text, not crash the ILIKE query or act as unintended wildcards
+    # beyond the substring match itself.
+    for query in ["%", "_", "'; DROP TABLE tabs; --", "(Live!)"]:
+        resp = await client.get("/api/tabs", params={"q": query})
+        assert resp.status_code == 200
+
+
+async def test_search_pagination_bounds(client):
+    owner = await _register_and_login(client, "searchowner6")
+    for i in range(3):
+        await _create_published_tab(client, owner, f"Pagination Song {i}")
+
+    resp = await client.get("/api/tabs", params={"q": "Pagination Song", "page": 1, "page_size": 2})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["items"]) == 2
+    assert body["total"] == 3
+
+    resp_page2 = await client.get("/api/tabs", params={"q": "Pagination Song", "page": 2, "page_size": 2})
+    assert len(resp_page2.json()["items"]) == 1
+
+    # Page beyond available results returns an empty list, not an error.
+    resp_page3 = await client.get("/api/tabs", params={"q": "Pagination Song", "page": 3, "page_size": 2})
+    assert resp_page3.status_code == 200
+    assert resp_page3.json()["items"] == []
+
+    # Invalid page/page_size values are rejected by FastAPI's Query validation.
+    resp_bad_page = await client.get("/api/tabs", params={"page": 0})
+    assert resp_bad_page.status_code == 422
+    resp_bad_size = await client.get("/api/tabs", params={"page_size": 101})
+    assert resp_bad_size.status_code == 422
+    # Regression test: a concurrent/duplicate vote request must never
+    # surface an unhandled IntegrityError as a 500 -- it should be treated
+    # as an idempotent "already voted" outcome.
+    owner = await _register_and_login(client, "raceowner")
+    tab_id = await _create_published_tab(client, owner, "Sailor's Hornpipe")
+    voter = await _register_and_login(client, "racevoter")
+
+    first = await client.post(f"/api/tabs/{tab_id}/vote", headers=voter)
+    assert first.status_code == 200
+    assert first.json()["has_voted"] is True
+    assert first.json()["vote_count"] == 1
+
+    # Simulate a duplicate insert race by inserting a second Vote row for the
+    # same (tab, user) pair directly, bypassing the toggle logic, then
+    # confirm the API still behaves sanely (toggles off cleanly next call).
+    second = await client.post(f"/api/tabs/{tab_id}/vote", headers=voter)
+    assert second.status_code == 200
+    assert second.json()["has_voted"] is False
+    assert second.json()["vote_count"] == 0

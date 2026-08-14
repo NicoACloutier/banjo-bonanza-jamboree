@@ -18,6 +18,17 @@ def test_slur_detected_leetspeak_and_separators():
     assert contains_offensive_language("f a g g o t") is True
 
 
+def test_word_boundary_slurs_not_bypassed_by_trailing_words():
+    # Regression test: "paki"/"jap(s)" patterns previously used a `\b`
+    # anchor, but normalization strips all whitespace before matching, so
+    # `\b` never matched once another word followed the slur directly
+    # (e.g. "paki people" -> "pakipeople"). These must now be caught.
+    assert contains_offensive_language("I hate paki people") is True
+    assert contains_offensive_language("song about japs") is True
+    assert contains_offensive_language("the jap invasion") is True
+    assert contains_offensive_language("go back paki") is True
+
+
 def test_find_offending_fields_reports_names():
     fields = {"song_name": "Nice Song", "artist": "sp1c band", "album": None}
     assert find_offending_fields(fields) == ["artist"]

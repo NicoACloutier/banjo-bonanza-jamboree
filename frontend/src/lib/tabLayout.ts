@@ -31,8 +31,14 @@ export function computePlaybackSchedule(
   for (const note of sorted) {
     if (!note.is_rest) {
       const openString = tuning.open_strings[note.string_number - 1];
-      const frequency = frettedFrequency(openString, note.fret, transposeSemitones);
-      timed.push({ ...note, startTimeSeconds: elapsed, frequency });
+      // Defensive: an out-of-range string_number (which should never happen
+      // given server-side validation, but could occur with stale/malformed
+      // client-side data) must not crash the whole schedule -- skip just
+      // this note's sound rather than throwing mid-loop.
+      if (openString !== undefined) {
+        const frequency = frettedFrequency(openString, note.fret, transposeSemitones);
+        timed.push({ ...note, startTimeSeconds: elapsed, frequency });
+      }
     }
     elapsed += note.duration_beats * secondsPerBeat;
   }

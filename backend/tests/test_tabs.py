@@ -49,6 +49,59 @@ async def test_rest_note_round_trips_and_advances_no_sound(client):
     ]
 
 
+async def test_create_tab_rejects_out_of_range_string_number(client):
+    # Regression test: string_number outside 1..5 used to be accepted by
+    # the API with no validation, which would later crash frontend
+    # playback scheduling (indexing tuning.open_strings out of bounds).
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Bad String",
+            "tuning_key": "standard_g",
+            "notes": [{"position": 0, "string_number": 6, "fret": 0, "duration_beats": 1.0}],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+    resp_zero = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Bad String Zero",
+            "tuning_key": "standard_g",
+            "notes": [{"position": 0, "string_number": 0, "fret": 0, "duration_beats": 1.0}],
+            "publish": True,
+        },
+    )
+    assert resp_zero.status_code == 400
+
+
+async def test_create_tab_rejects_negative_fret(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Bad Fret",
+            "tuning_key": "standard_g",
+            "notes": [{"position": 0, "string_number": 1, "fret": -1, "duration_beats": 1.0}],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
+async def test_create_tab_rejects_non_positive_duration(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Bad Duration",
+            "tuning_key": "standard_g",
+            "notes": [{"position": 0, "string_number": 1, "fret": 0, "duration_beats": 0}],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
 async def test_create_draft_requires_login(client):
     resp = await client.post(
         "/api/tabs",

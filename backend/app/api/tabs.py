@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -57,6 +58,31 @@ def _validate_tuning(tuning_key: str) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown tuning: {tuning_key}")
 
 
+def _validate_notes(notes_in) -> None:
+    """
+    Validate note fields server-side so malformed data (e.g. an out-of-range
+    string number) can never be persisted and later crash frontend playback
+    scheduling, which indexes `tuning.open_strings[string_number - 1]` with
+    no bounds check of its own.
+    """
+    for i, note in enumerate(notes_in):
+        if not (1 <= note.string_number <= 5):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Note {i}: string_number must be between 1 and 5.",
+            )
+        if note.fret < 0 or note.fret > 24:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Note {i}: fret must be between 0 and 24.",
+            )
+        if note.duration_beats <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Note {i}: duration_beats must be positive.",
+            )
+
+
 async def _replace_notes(db: AsyncSession, tab: Tab, notes_in) -> None:
     """
     Replace all notes (and their lyrics) belonging to `tab`.
@@ -108,6 +134,7 @@ async def create_tab(
 ) -> MsgspecResponse:
     body = await parse_json_body(request, TabCreateRequest)
     _validate_tuning(body.tuning_key)
+    _validate_notes(body.notes)
 
     if user is None:
         # Anonymous users may only create tabs directly (published immediately);
@@ -225,6 +252,7 @@ async def update_tab(
 ) -> MsgspecResponse:
     body = await parse_json_body(request, TabUpdateRequest)
     _validate_tuning(body.tuning_key)
+    _validate_notes(body.notes)
 
     result = await db.execute(select(Tab).where(Tab.id == tab_id).options(*_TAB_LOAD_OPTIONS))
     tab = result.scalar_one_or_none()
@@ -248,7 +276,8 @@ async def update_tab(
     result = await db.execute(select(Tab).where(Tab.id == tab_id).options(*_TAB_LOAD_OPTIONS))
     tab = result.scalar_one()
     votes = await _vote_count(db, tab.id)
-    return MsgspecResponse(tab_to_detail(tab, vote_count=votes, has_voted=False))
+    voted = await _has_voted(db, tab.id, user.id)
+    return MsgspecResponse(tab_to_detail(tab, vote_count=votes, has_voted=voted))
 
 
 @router.delete("/{tab_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
@@ -282,10 +311,20 @@ async def vote_tab(
     if existing_vote is not None:
         await db.delete(existing_vote)
         has_voted = False
+        await db.commit()
     else:
         db.add(Vote(tab_id=tab_id, user_id=user.id))
         has_voted = True
-    await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            # A concurrent request (e.g. a double-click or retried request)
+            # already inserted this user's vote for this tab between our
+            # SELECT and INSERT. Roll back and treat the vote as already
+            # present, so the toggle stays idempotent instead of raising a
+            # 500 for what is really just a race, not a real error.
+            await db.rollback()
+            has_voted = True
 
     votes = await _vote_count(db, tab_id)
     return MsgspecResponse(VoteResponse(tab_id=tab_id, vote_count=votes, has_voted=has_voted))

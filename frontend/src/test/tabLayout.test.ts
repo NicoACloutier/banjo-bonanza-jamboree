@@ -79,4 +79,20 @@ describe("tabLayout", () => {
     const notes = [makeNote({ duration_beats: 1 }), makeNote({ duration_beats: 3, is_rest: true })];
     expect(totalDurationSeconds(notes, 60)).toBeCloseTo(4, 5);
   });
+
+  it("does not crash and skips sound for a note with an out-of-range string_number", () => {
+    // Defense-in-depth: the backend now validates string_number is 1..5,
+    // but the frontend schedule builder must not throw if it ever receives
+    // malformed data (e.g. from stale cached data or a future bug).
+    const notes = [
+      makeNote({ id: "bad", position: 0, string_number: 9, duration_beats: 1 }),
+      makeNote({ id: "good", position: 1, string_number: 1, duration_beats: 1 }),
+    ];
+    expect(() => computePlaybackSchedule(notes, tuning, 60, 0)).not.toThrow();
+    const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+    // The malformed note produces no sounding event, but time still advances
+    // for it, so "good" starts at 1s, not 0s.
+    expect(schedule.map((n) => n.id)).toEqual(["good"]);
+    expect(schedule[0].startTimeSeconds).toBe(1);
+  });
 });
