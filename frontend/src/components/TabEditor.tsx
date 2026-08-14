@@ -47,6 +47,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
   const [pendingDuration, setPendingDuration] = useState(1);
   const [pendingLineBreak, setPendingLineBreak] = useState(false);
   const [pendingLyric, setPendingLyric] = useState("");
+  const [pendingIsRest, setPendingIsRest] = useState(false);
 
   const selectedNote = useMemo(() => notes.find((n) => n.id === selectedNoteId) ?? null, [notes, selectedNoteId]);
 
@@ -58,7 +59,8 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       fret: pendingFret,
       duration_beats: pendingDuration,
       line_break: pendingLineBreak,
-      lyric: pendingLyric.trim() ? pendingLyric.trim() : null,
+      lyric: pendingIsRest ? null : pendingLyric.trim() ? pendingLyric.trim() : null,
+      is_rest: pendingIsRest,
     };
     onNotesChange([...notes, newNote]);
     setPendingLyric("");
@@ -145,11 +147,25 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       {selectedNote && (
         <div className="panel">
           <h3>Edit selected note</h3>
+          <label>
+            <input
+              type="checkbox"
+              checked={selectedNote.is_rest}
+              onChange={(e) =>
+                updateSelectedNote({
+                  is_rest: e.target.checked,
+                  lyric: e.target.checked ? null : selectedNote.lyric,
+                })
+              }
+            />
+            This is a rest (no sound -- just a gap before the next note)
+          </label>
           <div className="form-row">
             <label>
               String
               <select
                 value={selectedNote.string_number}
+                disabled={selectedNote.is_rest}
                 onChange={(e) => updateSelectedNote({ string_number: Number(e.target.value) })}
               >
                 {[1, 2, 3, 4, 5].map((s) => (
@@ -166,6 +182,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
                 min={0}
                 max={24}
                 value={selectedNote.fret}
+                disabled={selectedNote.is_rest}
                 onChange={(e) => updateSelectedNote({ fret: Number(e.target.value) })}
               />
             </label>
@@ -188,6 +205,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
             <input
               type="text"
               value={selectedNote.lyric ?? ""}
+              disabled={selectedNote.is_rest}
               onChange={(e) => updateSelectedNote({ lyric: e.target.value || null })}
             />
           </label>
@@ -206,11 +224,16 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       )}
 
       <h3>Add a note</h3>
+      <label>
+        <input type="checkbox" checked={pendingIsRest} onChange={(e) => setPendingIsRest(e.target.checked)} />
+        This is a rest (no sound -- just a gap before the next note)
+      </label>
       <div className="string-fret-picker" role="group" aria-label="Pick a string">
         {[1, 2, 3, 4, 5].map((s) => (
           <button
             key={s}
             type="button"
+            disabled={pendingIsRest}
             className={pendingString === s ? "" : "secondary"}
             onClick={() => setPendingString(s)}
           >
@@ -226,6 +249,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
             min={0}
             max={24}
             value={pendingFret}
+            disabled={pendingIsRest}
             onChange={(e) => setPendingFret(Number(e.target.value))}
           />
         </label>
@@ -241,7 +265,12 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
         </label>
         <label>
           Lyric (optional)
-          <input type="text" value={pendingLyric} onChange={(e) => setPendingLyric(e.target.value)} />
+          <input
+            type="text"
+            value={pendingLyric}
+            disabled={pendingIsRest}
+            onChange={(e) => setPendingLyric(e.target.value)}
+          />
         </label>
         <label>
           <input
@@ -252,7 +281,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
           New line after this note
         </label>
       </div>
-      <button onClick={addNote}>+ Add Note</button>
+      <button onClick={addNote}>+ Add Note{pendingIsRest ? " (Rest)" : ""}</button>
     </div>
   );
 }

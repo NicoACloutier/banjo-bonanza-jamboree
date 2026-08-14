@@ -109,11 +109,14 @@ class Note(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
     tab_id: Mapped[str] = mapped_column(ForeignKey("tabs.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-    string_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5
-    fret: Mapped[int] = mapped_column(Integer, nullable=False)  # 0 = open string
+    string_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5 (ignored for rests)
+    fret: Mapped[int] = mapped_column(Integer, nullable=False)  # 0 = open string (ignored for rests)
     # Duration expressed in quarter-note beats (0.25 = 16th, 0.5 = 8th, 1 = quarter, etc.)
     duration_beats: Mapped[float] = mapped_column(default=1.0)
     line_break: Mapped[bool] = mapped_column(Boolean, default=False)
+    # A rest: takes up time (advances playback) but produces no sound and no
+    # fret number in the rendered tab -- just extra space before the next note.
+    is_rest: Mapped[bool] = mapped_column(Boolean, default=False)
 
     tab: Mapped[Tab] = relationship(back_populates="notes")
     lyric: Mapped["Lyric | None"] = relationship(back_populates="note", uselist=False)

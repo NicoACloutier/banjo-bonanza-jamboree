@@ -26,6 +26,7 @@ export interface NoteIn {
   duration_beats: number;
   line_break: boolean;
   lyric?: string | null;
+  is_rest: boolean;
 }
 
 export interface NoteOut {
@@ -36,6 +37,7 @@ export interface NoteOut {
   duration_beats: number;
   line_break: boolean;
   lyric: string | null;
+  is_rest: boolean;
 }
 
 export interface TabCreateRequest {

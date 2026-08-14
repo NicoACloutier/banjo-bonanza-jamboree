@@ -69,6 +69,10 @@ class NoteIn(msgspec.Struct):
     duration_beats: float = 1.0
     line_break: bool = False
     lyric: str | None = None
+    # A rest: no sound, no fret number shown -- just extra time/space before
+    # the next note. `string_number`/`fret` are ignored (but still required
+    # for schema simplicity; conventionally sent as 1/0 for rests).
+    is_rest: bool = False
 
 
 class NoteOut(msgspec.Struct):
@@ -79,6 +83,7 @@ class NoteOut(msgspec.Struct):
     duration_beats: float
     line_break: bool
     lyric: str | None = None
+    is_rest: bool = False
 
 
 # ---------------------------------------------------------------------------

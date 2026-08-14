@@ -13,6 +13,7 @@ function makeNote(overrides: Partial<NoteOut>): NoteOut {
     duration_beats: 1,
     line_break: false,
     lyric: null,
+    is_rest: false,
     ...overrides,
   };
 }
@@ -42,5 +43,20 @@ describe("TabRenderer", () => {
     const cell = container.querySelector(".tab-fret-cell.clickable")!;
     await user.click(cell);
     expect(onNoteClick).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }));
+  });
+
+  it("renders rests as blank space on every string row (no fret digit shown)", () => {
+    const notes = [
+      makeNote({ id: "a", position: 0, string_number: 3, fret: 2 }),
+      makeNote({ id: "rest", position: 1, fret: 0, is_rest: true, line_break: true }),
+    ];
+    const { container } = render(<TabRenderer notes={notes} />);
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
+    // The rest note must never show "0" (its placeholder fret) nor "-" on any
+    // of the 5 string rows -- only blank cells for its column.
+    expect(fretTexts).not.toContain("0");
+    // The other (real) note's fret should still render normally.
+    expect(fretTexts).toContain("2");
   });
 });

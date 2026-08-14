@@ -20,6 +20,35 @@ def _sample_notes():
     ]
 
 
+async def test_rest_note_round_trips_and_advances_no_sound(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Rest Test",
+            "tuning_key": "standard_g",
+            "notes": [
+                {"position": 0, "string_number": 1, "fret": 0, "duration_beats": 1.0},
+                {"position": 1, "string_number": 1, "fret": 0, "duration_beats": 2.0, "is_rest": True},
+                {"position": 2, "string_number": 2, "fret": 3, "duration_beats": 1.0},
+            ],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    notes = sorted(body["notes"], key=lambda n: n["position"])
+    assert [n["is_rest"] for n in notes] == [False, True, False]
+    assert notes[1]["duration_beats"] == 2.0
+
+    fetched = await client.get(f"/api/tabs/{body['id']}")
+    assert fetched.status_code == 200
+    assert [n["is_rest"] for n in sorted(fetched.json()["notes"], key=lambda n: n["position"])] == [
+        False,
+        True,
+        False,
+    ]
+
+
 async def test_create_draft_requires_login(client):
     resp = await client.post(
         "/api/tabs",

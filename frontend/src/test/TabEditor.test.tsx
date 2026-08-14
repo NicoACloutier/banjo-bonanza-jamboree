@@ -59,4 +59,18 @@ describe("TabEditor", () => {
     await user.click(screen.getByRole("button", { name: /delete this note/i }));
     expect(screen.queryByText(/edit selected note/i)).not.toBeInTheDocument();
   });
+
+  it("adds a rest note (no fret digit rendered) when the rest checkbox is checked", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    await user.click(screen.getByLabelText(/this is a rest/i));
+    await user.click(screen.getByRole("button", { name: /\+ add note \(rest\)/i }));
+
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
+    // A rest never shows a digit, so none of the string rows should show "0".
+    expect(fretTexts).not.toContain("0");
+    expect(fretTexts.every((t) => t === "")).toBe(true);
+  });
 });

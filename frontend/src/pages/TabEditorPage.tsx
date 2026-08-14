@@ -20,6 +20,7 @@ function notesToNoteIn(notes: NoteOut[]): NoteIn[] {
     duration_beats: n.duration_beats,
     line_break: n.line_break,
     lyric: n.lyric,
+    is_rest: n.is_rest,
   }));
 }
 

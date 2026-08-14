@@ -12,6 +12,7 @@ function makeNote(overrides: Partial<NoteOut>): NoteOut {
     duration_beats: 1,
     line_break: false,
     lyric: null,
+    is_rest: false,
     ...overrides,
   };
 }
@@ -59,5 +60,23 @@ describe("tabLayout", () => {
     expect(lines[0].map((n) => n.id)).toEqual(["a"]);
     expect(lines[1].map((n) => n.id)).toEqual(["b", "c"]);
     expect(lines[2].map((n) => n.id)).toEqual(["d"]);
+  });
+
+  it("skips rest notes when building the sounding schedule, but still advances time", () => {
+    const notes = [
+      makeNote({ id: "a", position: 0, duration_beats: 1 }),
+      makeNote({ id: "rest", position: 1, duration_beats: 2, is_rest: true }),
+      makeNote({ id: "b", position: 2, duration_beats: 1 }),
+    ];
+    const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+    // The rest itself produces no sounding event...
+    expect(schedule.map((n) => n.id)).toEqual(["a", "b"]);
+    // ...but note "b" starts 3 seconds in (1s for "a" + 2s for the rest), not 1s.
+    expect(schedule.map((n) => n.startTimeSeconds)).toEqual([0, 3]);
+  });
+
+  it("still counts rest duration towards the total playback duration", () => {
+    const notes = [makeNote({ duration_beats: 1 }), makeNote({ duration_beats: 3, is_rest: true })];
+    expect(totalDurationSeconds(notes, 60)).toBeCloseTo(4, 5);
   });
 });

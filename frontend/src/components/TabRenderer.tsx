@@ -52,9 +52,15 @@ export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick 
                         .join(" ")}
                       style={isSelected ? { outline: "2px solid var(--ember-dark)" } : undefined}
                       onClick={onNoteClick ? () => onNoteClick(note) : undefined}
-                      title={onNoteClick ? "Click to select/edit this note" : undefined}
+                      title={
+                        onNoteClick
+                          ? note.is_rest
+                            ? "Click to select/edit this rest"
+                            : "Click to select/edit this note"
+                          : undefined
+                      }
                     >
-                      {onThisString ? note.fret : "-"}
+                      {note.is_rest ? "" : onThisString ? note.fret : "-"}
                     </span>
                   );
                 })}

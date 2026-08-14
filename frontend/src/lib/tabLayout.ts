@@ -12,7 +12,12 @@ export interface TimedNote extends NoteOut {
   frequency: number;
 }
 
-/** Compute absolute start times (seconds) and frequencies for every note, in position order. */
+/**
+ * Compute absolute start times (seconds) and frequencies for every
+ * *sounding* note, in position order. Rests advance the playback clock but
+ * are intentionally excluded from the returned schedule -- they produce no
+ * sound.
+ */
 export function computePlaybackSchedule(
   notes: NoteOut[],
   tuning: TuningOut,
@@ -24,9 +29,11 @@ export function computePlaybackSchedule(
   let elapsed = 0;
   const timed: TimedNote[] = [];
   for (const note of sorted) {
-    const openString = tuning.open_strings[note.string_number - 1];
-    const frequency = frettedFrequency(openString, note.fret, transposeSemitones);
-    timed.push({ ...note, startTimeSeconds: elapsed, frequency });
+    if (!note.is_rest) {
+      const openString = tuning.open_strings[note.string_number - 1];
+      const frequency = frettedFrequency(openString, note.fret, transposeSemitones);
+      timed.push({ ...note, startTimeSeconds: elapsed, frequency });
+    }
     elapsed += note.duration_beats * secondsPerBeat;
   }
   return timed;

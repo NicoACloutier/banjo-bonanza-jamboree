@@ -76,6 +76,7 @@ async def _replace_notes(db: AsyncSession, tab: Tab, notes_in) -> None:
             fret=note_in.fret,
             duration_beats=note_in.duration_beats,
             line_break=note_in.line_break,
+            is_rest=note_in.is_rest,
         )
         db.add(note)
         await db.flush()

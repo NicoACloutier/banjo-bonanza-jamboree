@@ -19,6 +19,7 @@ def note_to_out(note: Note) -> NoteOut:
         duration_beats=note.duration_beats,
         line_break=note.line_break,
         lyric=note.lyric.text if note.lyric else None,
+        is_rest=note.is_rest,
     )
 
 
