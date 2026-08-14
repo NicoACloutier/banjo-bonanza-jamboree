@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest";
+import { computePlaybackSchedule, splitIntoLines, totalDurationSeconds } from "../lib/tabLayout";
+import { getFallbackTuning } from "../lib/tunings";
+import type { NoteOut } from "../types/api";
+
+function makeNote(overrides: Partial<NoteOut>): NoteOut {
+  return {
+    id: "n1",
+    position: 0,
+    string_number: 1,
+    fret: 0,
+    duration_beats: 1,
+    line_break: false,
+    lyric: null,
+    ...overrides,
+  };
+}
+
+describe("tabLayout", () => {
+  const tuning = getFallbackTuning("standard_g");
+
+  it("computes sequential start times based on tempo and durations", () => {
+    const notes = [
+      makeNote({ id: "a", position: 0, duration_beats: 1 }),
+      makeNote({ id: "b", position: 1, duration_beats: 2 }),
+      makeNote({ id: "c", position: 2, duration_beats: 1 }),
+    ];
+    const schedule = computePlaybackSchedule(notes, tuning, 60, 0); // 1 beat = 1 second at 60bpm
+    expect(schedule.map((n) => n.startTimeSeconds)).toEqual([0, 1, 3]);
+  });
+
+  it("sorts by position regardless of input order", () => {
+    const notes = [makeNote({ id: "b", position: 1 }), makeNote({ id: "a", position: 0 })];
+    const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+    expect(schedule.map((n) => n.id)).toEqual(["a", "b"]);
+  });
+
+  it("applies transposition to computed frequencies", () => {
+    const notes = [makeNote({ string_number: 1, fret: 0 })];
+    const noTranspose = computePlaybackSchedule(notes, tuning, 100, 0)[0].frequency;
+    const transposedUp = computePlaybackSchedule(notes, tuning, 100, 2)[0].frequency;
+    expect(transposedUp).toBeCloseTo(noTranspose * Math.pow(2, 2 / 12), 3);
+  });
+
+  it("computes total duration in seconds", () => {
+    const notes = [makeNote({ duration_beats: 1 }), makeNote({ duration_beats: 3 })];
+    expect(totalDurationSeconds(notes, 60)).toBeCloseTo(4, 5);
+  });
+
+  it("splits notes into lines at line_break markers", () => {
+    const notes = [
+      makeNote({ id: "a", position: 0, line_break: true }),
+      makeNote({ id: "b", position: 1 }),
+      makeNote({ id: "c", position: 2, line_break: true }),
+      makeNote({ id: "d", position: 3 }),
+    ];
+    const lines = splitIntoLines(notes);
+    expect(lines).toHaveLength(3);
+    expect(lines[0].map((n) => n.id)).toEqual(["a"]);
+    expect(lines[1].map((n) => n.id)).toEqual(["b", "c"]);
+    expect(lines[2].map((n) => n.id)).toEqual(["d"]);
+  });
+});
