@@ -111,11 +111,13 @@ def _validate_notes(notes_in) -> None:
                     detail=f"Note {i}: a rest cannot have any frets.",
                 )
             continue
+        # A non-rest note with zero frets is allowed: it is simply an
+        # unfilled placeholder slot (e.g. a freshly-added empty note the
+        # user hasn't tabbed yet). It sounds nothing during playback --
+        # identical to a rest -- but is displayed as dashes rather than a
+        # blank gap, and can still be published in that state.
         if not note.frets:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Note {i}: must have at least one fret (or be marked as a rest).",
-            )
+            continue
         if len(note.frets) > 5:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

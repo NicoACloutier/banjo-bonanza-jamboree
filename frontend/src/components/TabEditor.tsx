@@ -61,12 +61,19 @@ function createNoteId(): string {
     : `note-${Math.random().toString(36).slice(2)}`;
 }
 
+/** Notes added/seeded as a single "line" at once (see `+ Add a line`). */
+export const NOTES_PER_LINE = 16;
+
 /**
- * A blank placeholder note: rendered as an empty (rest) slot in the
- * preview until the user clicks it and fills in strings/frets. This is
- * what a freshly-created tab is pre-populated with, and what "+ Add empty
- * note(s)" appends -- letting users lay out the song's length first and
- * fill in the actual notes afterward.
+ * A blank placeholder note: not a rest -- it is a normal, sound-producing
+ * slot with no strings picked yet, so it renders as a row of dashes ("-")
+ * in every string in the preview until the user clicks it and fills in
+ * strings/frets. This is what a freshly-created tab is pre-populated
+ * with, and what "+ Add 1 empty note" / "+ Add a line" append -- letting
+ * users lay out the song's length first and fill in the actual notes
+ * afterward. Left unfilled, it plays silently at save time, identical to
+ * a rest (see backend `_validate_notes`), but is visually distinct from
+ * one.
  */
 export function createEmptyNote(position: number): NoteOut {
   return {
@@ -75,7 +82,7 @@ export function createEmptyNote(position: number): NoteOut {
     duration_beats: 1,
     line_break: false,
     lyric: null,
-    is_rest: true,
+    is_rest: false,
     frets: [],
   };
 }
@@ -173,7 +180,6 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     { string_number: 1, fret: 0, technique: "normal", slide_to_fret: null, bend_semitones: null, right_hand_finger: null },
   ]);
   const [pendingDuration, setPendingDuration] = useState(1);
-  const [pendingLineBreak, setPendingLineBreak] = useState(false);
   const [pendingLyric, setPendingLyric] = useState("");
   const [pendingIsRest, setPendingIsRest] = useState(false);
   // Copy/paste: a contiguous range of note ids the user has copied, so a
@@ -213,7 +219,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       id: createNoteId(),
       position: notes.length,
       duration_beats: pendingDuration,
-      line_break: pendingLineBreak,
+      line_break: false,
       lyric: pendingIsRest ? null : pendingLyric.trim() ? pendingLyric.trim() : null,
       is_rest: pendingIsRest,
       frets: pendingIsRest
@@ -222,13 +228,32 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     };
     onNotesChange([...notes, newNote]);
     setPendingLyric("");
-    setPendingLineBreak(false);
   };
 
   const removeSelectedNote = () => {
     if (!selectedNote) return;
     const remaining = notes
       .filter((n) => n.id !== selectedNote.id)
+      .map((n, idx) => ({ ...n, position: idx }));
+    onNotesChange(remaining);
+    setSelectedNoteId(null);
+  };
+
+  /**
+   * Remove the whole 16-note line containing the currently selected note
+   * (i.e. positions [lineStart, lineStart + NOTES_PER_LINE)), so a user can
+   * delete an entire verse/chorus line at once rather than one note at a
+   * time.
+   */
+  const removeSelectedLine = () => {
+    if (!selectedNote) return;
+    const sorted = [...notes].sort((a, b) => a.position - b.position);
+    const selectedIdx = sorted.findIndex((n) => n.id === selectedNote.id);
+    if (selectedIdx === -1) return;
+    const lineStart = Math.floor(selectedIdx / NOTES_PER_LINE) * NOTES_PER_LINE;
+    const lineEnd = lineStart + NOTES_PER_LINE;
+    const remaining = sorted
+      .filter((_, idx) => idx < lineStart || idx >= lineEnd)
       .map((n, idx) => ({ ...n, position: idx }));
     onNotesChange(remaining);
     setSelectedNoteId(null);
@@ -358,74 +383,12 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
           onClick={() =>
             onNotesChange([
               ...notes,
-              ...Array.from({ length: 10 }, (_, i) => createEmptyNote(notes.length + i)),
+              ...Array.from({ length: 16 }, (_, i) => createEmptyNote(notes.length + i)),
             ])
           }
         >
-          + Add 10 empty notes
+          + Add a line
         </button>
-      </div>
-
-      <div className="panel">
-        <h3>Copy / paste a range</h3>
-        <p className="muted-text">
-          Select a start and end note (e.g. the chorus), copy it, then paste it back in after selecting where
-          it should go -- handy for reusing a section and just changing the lyrics.
-        </p>
-        <div className="form-row">
-          <label>
-            Range start
-            <select value={rangeStartId ?? ""} onChange={(e) => setRangeStartId(e.target.value || null)}>
-              <option value="">(none)</option>
-              {notes.map((n, idx) => (
-                <option key={n.id} value={n.id}>
-                  Note {idx + 1}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Range end
-            <select value={rangeEndId ?? ""} onChange={(e) => setRangeEndId(e.target.value || null)}>
-              <option value="">(none)</option>
-              {notes.map((n, idx) => (
-                <option key={n.id} value={n.id}>
-                  Note {idx + 1}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="secondary"
-            disabled={!rangeStartId || !rangeEndId}
-            onClick={() => {
-              const startIdx = notes.findIndex((n) => n.id === rangeStartId);
-              const endIdx = notes.findIndex((n) => n.id === rangeEndId);
-              if (startIdx === -1 || endIdx === -1) return;
-              const [lo, hi] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-              setClipboard(notes.slice(lo, hi + 1));
-            }}
-          >
-            Copy range
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={!clipboard}
-            onClick={() => {
-              if (!clipboard) return;
-              // Paste after the currently selected note (or at the end if none selected).
-              const insertAfterIdx = selectedNote ? notes.findIndex((n) => n.id === selectedNote.id) : notes.length - 1;
-              const pasted = clipboard.map((n) => ({ ...n, id: createNoteId() }));
-              const before = notes.slice(0, insertAfterIdx + 1);
-              const after = notes.slice(insertAfterIdx + 1);
-              onNotesChange([...before, ...pasted, ...after].map((n, idx) => ({ ...n, position: idx })));
-            }}
-          >
-            Paste after selected note{clipboard ? ` (${clipboard.length} notes)` : ""}
-          </button>
-        </div>
       </div>
 
       {selectedNote && (
@@ -501,19 +464,78 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
               onChange={(e) => updateSelectedNote({ lyric: e.target.value || null })}
             />
           </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={selectedNote.line_break}
-              onChange={(e) => updateSelectedNote({ line_break: e.target.checked })}
-            />
-            Start a new line after this note
-          </label>
-          <button className="secondary" onClick={removeSelectedNote}>
-            Delete this note
-          </button>
+          <div className="form-row">
+            <button className="secondary" onClick={removeSelectedNote}>
+              Delete this note
+            </button>
+            <button className="secondary" onClick={removeSelectedLine}>
+              Remove line
+            </button>
+          </div>
         </div>
       )}
+
+      <div className="panel">
+        <h3>Copy / paste a range</h3>
+        <p className="muted-text">
+          Select a start and end note (e.g. the chorus), copy it, then paste it back in after selecting where
+          it should go -- handy for reusing a section and just changing the lyrics.
+        </p>
+        <div className="form-row">
+          <label>
+            Range start
+            <select value={rangeStartId ?? ""} onChange={(e) => setRangeStartId(e.target.value || null)}>
+              <option value="">(none)</option>
+              {notes.map((n, idx) => (
+                <option key={n.id} value={n.id}>
+                  Note {idx + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Range end
+            <select value={rangeEndId ?? ""} onChange={(e) => setRangeEndId(e.target.value || null)}>
+              <option value="">(none)</option>
+              {notes.map((n, idx) => (
+                <option key={n.id} value={n.id}>
+                  Note {idx + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!rangeStartId || !rangeEndId}
+            onClick={() => {
+              const startIdx = notes.findIndex((n) => n.id === rangeStartId);
+              const endIdx = notes.findIndex((n) => n.id === rangeEndId);
+              if (startIdx === -1 || endIdx === -1) return;
+              const [lo, hi] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+              setClipboard(notes.slice(lo, hi + 1));
+            }}
+          >
+            Copy range
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!clipboard}
+            onClick={() => {
+              if (!clipboard) return;
+              // Paste after the currently selected note (or at the end if none selected).
+              const insertAfterIdx = selectedNote ? notes.findIndex((n) => n.id === selectedNote.id) : notes.length - 1;
+              const pasted = clipboard.map((n) => ({ ...n, id: createNoteId() }));
+              const before = notes.slice(0, insertAfterIdx + 1);
+              const after = notes.slice(insertAfterIdx + 1);
+              onNotesChange([...before, ...pasted, ...after].map((n, idx) => ({ ...n, position: idx })));
+            }}
+          >
+            Paste after selected note{clipboard ? ` (${clipboard.length} notes)` : ""}
+          </button>
+        </div>
+      </div>
 
       <h3>Add a note</h3>
       <label>
@@ -569,10 +591,6 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
             disabled={pendingIsRest}
             onChange={(e) => setPendingLyric(e.target.value)}
           />
-        </label>
-        <label>
-          <input type="checkbox" checked={pendingLineBreak} onChange={(e) => setPendingLineBreak(e.target.checked)} />
-          New line after this note
         </label>
       </div>
       <button onClick={addNote} disabled={!pendingIsRest && pendingFrets.length === 0}>

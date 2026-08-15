@@ -203,33 +203,31 @@ describe("TabEditor", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await user.click(screen.getByRole("button", { name: /\+ add 1 empty note/i }));
-    // An empty note is a rest -- no strings are filled in, so it renders as blank cells.
+    // An empty note is a non-rest placeholder -- no strings filled in yet, so it renders as dashes.
     await user.click(screen.getByRole("button", { name: /\+ add 1 empty note/i }));
     // Both the range-start and range-end dropdowns should now list 2 notes.
     expect(screen.getAllByRole("option", { name: "Note 2" }).length).toBeGreaterThan(0);
   });
 
-  it("adds 10 empty notes at once via the '+ Add 10 empty notes' button", async () => {
+  it("adds a line (16 empty notes) at once via the '+ Add a line' button", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-    await user.click(screen.getByRole("button", { name: /\+ add 10 empty notes/i }));
-    expect(screen.getAllByRole("option", { name: "Note 10" }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("option", { name: "Note 11" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /\+ add a line/i }));
+    expect(screen.getAllByRole("option", { name: "Note 16" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("option", { name: "Note 17" })).not.toBeInTheDocument();
   });
 
   it("a freshly-added empty note can be clicked and filled in with a string/fret", async () => {
     const user = userEvent.setup();
     const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
 
-    // The empty note renders as blank fret cells; click the first one to select it.
+    // The empty note renders as dash fret cells (it's a non-rest placeholder); click one to select it.
     const firstCell = container.querySelector(".tab-fret-cell.clickable")!;
     await user.click(firstCell);
     expect(screen.getByText(/edit selected note/i)).toBeInTheDocument();
 
-    // Uncheck "this is a rest" (in the "Edit selected note" panel) to reveal
-    // the string picker, then pick string 1 and set fret 3.
-    const restCheckboxes = screen.getAllByLabelText(/this is a rest/i);
-    await user.click(restCheckboxes[0]);
+    // It already starts as a non-rest note, so the string picker is already visible --
+    // pick string 1 and set fret 3.
     const editPanel = screen.getByText(/edit selected note/i).closest(".panel") as HTMLElement;
     await user.click(within(editPanel).getByRole("button", { name: "Str 1" }));
     const fretInputs = screen.getAllByLabelText(/^fret$/i);
@@ -252,5 +250,20 @@ describe("TabEditor", () => {
 
     expect(screen.queryByRole("option", { name: "Note 2" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("option", { name: "Note 1" }).length).toBeGreaterThan(0);
+  });
+
+  it("removes an entire line via the 'Remove line' button after selecting a note in it", async () => {
+    const user = userEvent.setup();
+    const notes = Array.from({ length: 17 }, (_, i) => createEmptyNote(i));
+    const { container } = render(<Harness initialNotes={notes} />);
+
+    // Select the first note (line 1: notes 1-16) and remove its line.
+    const firstCell = container.querySelectorAll(".tab-fret-cell.clickable")[0];
+    await user.click(firstCell);
+    await user.click(screen.getByRole("button", { name: /remove line/i }));
+
+    // Only the 17th note (now renumbered as note 1) should remain.
+    expect(screen.getAllByRole("option", { name: "Note 1" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("option", { name: "Note 2" })).not.toBeInTheDocument();
   });
 });

@@ -237,7 +237,12 @@ async def test_rest_with_frets_rejected(client):
     assert resp.status_code == 400
 
 
-async def test_non_rest_note_requires_at_least_one_fret(client):
+async def test_non_rest_note_with_no_frets_is_allowed_as_unfilled_placeholder(client):
+    # A non-rest note with zero frets is a valid "unfilled placeholder"
+    # slot (e.g. one of the empty notes a freshly-created tab is seeded
+    # with in the editor) -- it sounds nothing during playback, identical
+    # to a rest, but is allowed to be saved/published in that state so
+    # users aren't forced to fill in every seeded note before publishing.
     resp = await client.post(
         "/api/tabs",
         json={
@@ -247,7 +252,7 @@ async def test_non_rest_note_requires_at_least_one_fret(client):
             "publish": True,
         },
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 201
 
 
 async def test_create_tab_rejects_out_of_range_string_number(client):

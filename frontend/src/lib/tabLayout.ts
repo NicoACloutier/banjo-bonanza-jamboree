@@ -97,14 +97,22 @@ export function totalDurationSeconds(notes: NoteOut[], tempoBpm: number): number
   return notes.reduce((sum, n) => sum + n.duration_beats * secondsPerBeat, 0);
 }
 
-/** Split notes (in position order) into lines, breaking after any note flagged `line_break`. */
+/** Notes per rendered tab line before an automatic line break is inserted. */
+export const NOTES_PER_LINE = 16;
+
+/**
+ * Split notes (in position order) into lines. A line breaks automatically
+ * every `NOTES_PER_LINE` notes, or earlier if a note is explicitly flagged
+ * `line_break` (kept for any pre-existing tabs authored before automatic
+ * line breaks were introduced).
+ */
 export function splitIntoLines(notes: NoteOut[]): NoteOut[][] {
   const sorted = [...notes].sort((a, b) => a.position - b.position);
   const lines: NoteOut[][] = [];
   let current: NoteOut[] = [];
   for (const note of sorted) {
     current.push(note);
-    if (note.line_break) {
+    if (note.line_break || current.length >= NOTES_PER_LINE) {
       lines.push(current);
       current = [];
     }

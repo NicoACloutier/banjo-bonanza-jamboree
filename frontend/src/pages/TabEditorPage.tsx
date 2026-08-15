@@ -48,7 +48,7 @@ export function TabEditorPage() {
   const [notes, setNotes] = useState<NoteOut[]>(() =>
     // New tabs start with 10 empty (rest) note slots the user can click to
     // fill in one at a time, so the song's length can be laid out up front.
-    Array.from({ length: 10 }, (_, i) => createEmptyNote(i)),
+    Array.from({ length: 16 }, (_, i) => createEmptyNote(i)),
   );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
