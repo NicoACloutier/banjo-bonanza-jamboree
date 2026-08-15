@@ -1,13 +1,18 @@
 /**
  * Tab creation/editing UI.
  *
- * Notes are entered one at a time as a "slot": pick one or more strings
- * (more than one makes a chord -- several strings struck simultaneously),
- * give each picked string a fret number and an optional playing technique
- * (hammer-on, pull-off, or slide), optionally attach a lyric snippet and
- * mark a line break, then "Add Note" appends the slot to the tab. Existing
- * notes can be selected (click in the preview) to edit their
- * strings/frets/techniques/lyric/line-break or delete them.
+ * The song is laid out as a grid of note slots (16 to a line), added in
+ * bulk via "+ Add 1 empty note" / "+ Add a line" -- there's no separate
+ * one-note-at-a-time "Add a note" form. Every note starts blank (all "-"
+ * on every string): fret numbers are typed directly into the tab preview
+ * by clicking a string's cell for that note, and lyrics are typed
+ * directly into the small text box below each note. A note left blank on
+ * every string is, semantically, a rest -- there's no separate "mark as
+ * rest" checkbox; silence is just the absence of any fretted string.
+ * Selecting a note (by clicking any of its cells) opens a small side
+ * panel for its duration and per-string playing technique (hammer-on,
+ * pull-off, slide, bend, drop-thumb) and roll-pattern finger, since those
+ * don't fit naturally into a single typed character.
  */
 import { useMemo, useState } from "react";
 import { TabRenderer } from "./TabRenderer";
@@ -31,14 +36,6 @@ interface TabEditorProps {
   onNotesChange: (notes: NoteOut[]) => void;
 }
 
-const DURATION_OPTIONS = [
-  { label: "Sixteenth", value: 0.25 },
-  { label: "Eighth", value: 0.5 },
-  { label: "Quarter", value: 1 },
-  { label: "Half", value: 2 },
-  { label: "Whole", value: 4 },
-];
-
 const TECHNIQUE_OPTIONS: { label: string; value: Technique }[] = [
   { label: "Picked (normal)", value: "normal" },
   { label: "Hammer-on", value: "hammer_on" },
@@ -55,6 +52,9 @@ const FINGER_OPTIONS: { label: string; value: RightHandFinger | "" }[] = [
   { label: "Middle", value: "middle" },
 ];
 
+/** Duration (in beats) cycled through by clicking a note's duration marker, in order. */
+const DURATION_CYCLE = [0.25, 0.5, 1, 2, 4];
+
 function createNoteId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -67,13 +67,12 @@ export const NOTES_PER_LINE = 16;
 /**
  * A blank placeholder note: not a rest -- it is a normal, sound-producing
  * slot with no strings picked yet, so it renders as a row of dashes ("-")
- * in every string in the preview until the user clicks it and fills in
- * strings/frets. This is what a freshly-created tab is pre-populated
- * with, and what "+ Add 1 empty note" / "+ Add a line" append -- letting
- * users lay out the song's length first and fill in the actual notes
- * afterward. Left unfilled, it plays silently at save time, identical to
- * a rest (see backend `_validate_notes`), but is visually distinct from
- * one.
+ * in every string in the preview until the user clicks a string's cell
+ * and types a fret number. This is what a freshly-created tab is
+ * pre-populated with, and what "+ Add 1 empty note" / "+ Add a line"
+ * append -- letting users lay out the song's length first and fill in
+ * the actual notes afterward. Left unfilled, it plays silently at save
+ * time, identical to a rest (see backend `_validate_notes`).
  */
 export function createEmptyNote(position: number): NoteOut {
   return {
@@ -87,29 +86,19 @@ export function createEmptyNote(position: number): NoteOut {
   };
 }
 
-/** Editor for one string's fret/technique within a (possibly chordal) note slot. */
+/** Editor for one string's technique/roll-finger within a (possibly chordal) note slot; the fret itself is typed directly into the tab preview. */
 function FretRowEditor({
   fret,
   onChange,
-  onRemove,
 }: {
   fret: NoteFretIn;
   onChange: (patch: Partial<NoteFretIn>) => void;
-  onRemove: () => void;
 }) {
   return (
     <div className="form-row fret-row-editor">
-      <span className="fret-row-string-label">String {fret.string_number}</span>
-      <label>
-        Fret
-        <input
-          type="number"
-          min={0}
-          max={24}
-          value={fret.fret}
-          onChange={(e) => onChange({ fret: Number(e.target.value) })}
-        />
-      </label>
+      <span className="fret-row-string-label">
+        String {fret.string_number}, fret {fret.fret}
+      </span>
       <label>
         Technique
         <select
@@ -167,21 +156,12 @@ function FretRowEditor({
           ))}
         </select>
       </label>
-      <button type="button" className="secondary" onClick={onRemove}>
-        Remove string
-      </button>
     </div>
   );
 }
 
 export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesChange }: TabEditorProps) {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [pendingFrets, setPendingFrets] = useState<NoteFretIn[]>([
-    { string_number: 1, fret: 0, technique: "normal", slide_to_fret: null, bend_semitones: null, right_hand_finger: null },
-  ]);
-  const [pendingDuration, setPendingDuration] = useState(1);
-  const [pendingLyric, setPendingLyric] = useState("");
-  const [pendingIsRest, setPendingIsRest] = useState(false);
   // Copy/paste: a contiguous range of note ids the user has copied, so a
   // chorus (etc.) can be reused elsewhere without retabbing it -- only the
   // lyric typically needs editing afterward.
@@ -190,45 +170,6 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
   const [clipboard, setClipboard] = useState<NoteOut[] | null>(null);
 
   const selectedNote = useMemo(() => notes.find((n) => n.id === selectedNoteId) ?? null, [notes, selectedNoteId]);
-
-  const togglePendingString = (stringNumber: number) => {
-    setPendingFrets((current) => {
-      const exists = current.some((f) => f.string_number === stringNumber);
-      if (exists) return current.filter((f) => f.string_number !== stringNumber);
-      const newFret: NoteFretIn = {
-        string_number: stringNumber,
-        fret: 0,
-        technique: "normal",
-        slide_to_fret: null,
-        bend_semitones: null,
-        right_hand_finger: null,
-      };
-      return [...current, newFret].sort((a, b) => a.string_number - b.string_number);
-    });
-  };
-
-  const updatePendingFret = (stringNumber: number, patch: Partial<NoteFretIn>) => {
-    setPendingFrets((current) =>
-      current.map((f) => (f.string_number === stringNumber ? { ...f, ...patch } : f)),
-    );
-  };
-
-  const addNote = () => {
-    if (!pendingIsRest && pendingFrets.length === 0) return; // must have at least one string unless it's a rest
-    const newNote: NoteOut = {
-      id: createNoteId(),
-      position: notes.length,
-      duration_beats: pendingDuration,
-      line_break: false,
-      lyric: pendingIsRest ? null : pendingLyric.trim() ? pendingLyric.trim() : null,
-      is_rest: pendingIsRest,
-      frets: pendingIsRest
-        ? []
-        : pendingFrets.map((f) => ({ ...f, slide_to_fret: f.technique === "slide" ? f.slide_to_fret : null })),
-    };
-    onNotesChange([...notes, newNote]);
-    setPendingLyric("");
-  };
 
   const removeSelectedNote = () => {
     if (!selectedNote) return;
@@ -264,30 +205,59 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     onNotesChange(notes.map((n) => (n.id === selectedNote.id ? { ...n, ...patch } : n)));
   };
 
-  const toggleSelectedNoteString = (stringNumber: number) => {
-    if (!selectedNote) return;
-    const exists = selectedNote.frets.some((f) => f.string_number === stringNumber);
-    const nextFrets = exists
-      ? selectedNote.frets.filter((f) => f.string_number !== stringNumber)
-      : [
-          ...selectedNote.frets,
-          {
-            string_number: stringNumber,
-            fret: 0,
-            technique: "normal" as Technique,
-            slide_to_fret: null,
-            bend_semitones: null,
-            right_hand_finger: null,
-          },
-        ].sort((a, b) => a.string_number - b.string_number);
-    updateSelectedNote({ frets: nextFrets });
-  };
-
   const updateSelectedNoteFret = (stringNumber: number, patch: Partial<NoteFretIn>) => {
     if (!selectedNote) return;
     updateSelectedNote({
       frets: selectedNote.frets.map((f) => (f.string_number === stringNumber ? { ...f, ...patch } : f)),
     });
+  };
+
+  /**
+   * Handle a fret being typed (or cleared) for one string of one note,
+   * from the tab preview itself. `fret === null` removes the string from
+   * the note (reverting that cell to "-"); otherwise it either updates an
+   * existing string's fret or adds a new one (defaulting to "normal"
+   * technique).
+   */
+  const handleFretChange = (noteId: string, stringNumber: number, fret: number | null) => {
+    onNotesChange(
+      notes.map((n) => {
+        if (n.id !== noteId) return n;
+        if (fret === null) {
+          return { ...n, frets: n.frets.filter((f) => f.string_number !== stringNumber) };
+        }
+        const exists = n.frets.some((f) => f.string_number === stringNumber);
+        const nextFrets = exists
+          ? n.frets.map((f) => (f.string_number === stringNumber ? { ...f, fret } : f))
+          : [
+              ...n.frets,
+              {
+                string_number: stringNumber,
+                fret,
+                technique: "normal" as Technique,
+                slide_to_fret: null,
+                bend_semitones: null,
+                right_hand_finger: null,
+              },
+            ].sort((a, b) => a.string_number - b.string_number);
+        return { ...n, frets: nextFrets };
+      }),
+    );
+  };
+
+  const handleLyricChange = (noteId: string, lyric: string) => {
+    onNotesChange(notes.map((n) => (n.id === noteId ? { ...n, lyric: lyric || null } : n)));
+  };
+
+  const handleDurationCycle = (noteId: string) => {
+    onNotesChange(
+      notes.map((n) => {
+        if (n.id !== noteId) return n;
+        const currentIdx = DURATION_CYCLE.indexOf(n.duration_beats);
+        const nextDuration = DURATION_CYCLE[(currentIdx + 1) % DURATION_CYCLE.length];
+        return { ...n, duration_beats: nextDuration };
+      }),
+    );
   };
 
   return (
@@ -358,16 +328,18 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
 
       <h3>Tab preview</h3>
       <p className="muted-text">
-        Click any empty slot below to fill in its strings/frets, or click a filled note to edit it. Use the
-        buttons below to add more empty slots to the end of the song, or select a note above and click "Delete
-        this note" to remove it.
+        Click a string's cell to type its fret number directly (leave it blank/backspace it to clear that
+        string back to "-"). Click a note's tiny duration label above the strings to cycle its length, and
+        type lyrics straight into the box below each note. A note left blank on every string plays as
+        silence. Use the buttons below to add more empty notes to the end of the song.
       </p>
       <TabRenderer
         notes={notes}
         selectedNoteId={selectedNoteId}
-        onNoteClick={(note) => {
-          setSelectedNoteId(note.id);
-        }}
+        onNoteClick={(note) => setSelectedNoteId(note.id)}
+        onFretChange={handleFretChange}
+        onLyricChange={handleLyricChange}
+        onDurationCycle={handleDurationCycle}
       />
       <div className="toolbar">
         <button
@@ -383,7 +355,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
           onClick={() =>
             onNotesChange([
               ...notes,
-              ...Array.from({ length: 16 }, (_, i) => createEmptyNote(notes.length + i)),
+              ...Array.from({ length: NOTES_PER_LINE }, (_, i) => createEmptyNote(notes.length + i)),
             ])
           }
         >
@@ -394,34 +366,13 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       {selectedNote && (
         <div className="panel">
           <h3>Edit selected note</h3>
-          <label>
-            <input
-              type="checkbox"
-              checked={selectedNote.is_rest}
-              onChange={(e) =>
-                updateSelectedNote({
-                  is_rest: e.target.checked,
-                  lyric: e.target.checked ? null : selectedNote.lyric,
-                  frets: e.target.checked ? [] : selectedNote.frets,
-                })
-              }
-            />
-            This is a rest (no sound -- just a gap before the next note)
-          </label>
-          {!selectedNote.is_rest && (
+          {selectedNote.frets.length === 0 ? (
+            <p className="muted-text">
+              This note is blank on every string (a rest). Click one of its cells in the tab above and type a
+              fret number to give it a sound.
+            </p>
+          ) : (
             <>
-              <div className="string-fret-picker" role="group" aria-label="Pick one or more strings (multiple = chord)">
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={selectedNote.frets.some((f) => f.string_number === s) ? "" : "secondary"}
-                    onClick={() => toggleSelectedNoteString(s)}
-                  >
-                    Str {s}
-                  </button>
-                ))}
-              </div>
               {selectedNote.frets.length > 1 && (
                 <p className="muted-text">
                   This note has {selectedNote.frets.length} strings selected -- it will play as a chord.
@@ -435,35 +386,10 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
                     key={fret.string_number}
                     fret={fret}
                     onChange={(patch) => updateSelectedNoteFret(fret.string_number, patch)}
-                    onRemove={() => toggleSelectedNoteString(fret.string_number)}
                   />
                 ))}
             </>
           )}
-          <div className="form-row">
-            <label>
-              Duration
-              <select
-                value={selectedNote.duration_beats}
-                onChange={(e) => updateSelectedNote({ duration_beats: Number(e.target.value) })}
-              >
-                {DURATION_OPTIONS.map((d) => (
-                  <option key={d.value} value={d.value}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label>
-            Lyric at this note
-            <input
-              type="text"
-              value={selectedNote.lyric ?? ""}
-              disabled={selectedNote.is_rest}
-              onChange={(e) => updateSelectedNote({ lyric: e.target.value || null })}
-            />
-          </label>
           <div className="form-row">
             <button className="secondary" onClick={removeSelectedNote}>
               Delete this note
@@ -478,8 +404,8 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       <div className="panel">
         <h3>Copy / paste a range</h3>
         <p className="muted-text">
-          Select a start and end note (e.g. the chorus), copy it, then paste it back in after selecting where
-          it should go -- handy for reusing a section and just changing the lyrics.
+          Select a start and end note (e.g. the chorus), copy it, then paste it back in after selecting
+          where it should go -- handy for reusing a section and just changing the lyrics.
         </p>
         <div className="form-row">
           <label>
@@ -525,7 +451,9 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
             onClick={() => {
               if (!clipboard) return;
               // Paste after the currently selected note (or at the end if none selected).
-              const insertAfterIdx = selectedNote ? notes.findIndex((n) => n.id === selectedNote.id) : notes.length - 1;
+              const insertAfterIdx = selectedNote
+                ? notes.findIndex((n) => n.id === selectedNote.id)
+                : notes.length - 1;
               const pasted = clipboard.map((n) => ({ ...n, id: createNoteId() }));
               const before = notes.slice(0, insertAfterIdx + 1);
               const after = notes.slice(insertAfterIdx + 1);
@@ -536,66 +464,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
           </button>
         </div>
       </div>
-
-      <h3>Add a note</h3>
-      <label>
-        <input type="checkbox" checked={pendingIsRest} onChange={(e) => setPendingIsRest(e.target.checked)} />
-        This is a rest (no sound -- just a gap before the next note)
-      </label>
-      {!pendingIsRest && (
-        <>
-          <div className="string-fret-picker" role="group" aria-label="Pick one or more strings (multiple = chord)">
-            {[1, 2, 3, 4, 5].map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={pendingFrets.some((f) => f.string_number === s) ? "" : "secondary"}
-                onClick={() => togglePendingString(s)}
-              >
-                Str {s}
-              </button>
-            ))}
-          </div>
-          {pendingFrets.length > 1 && (
-            <p className="muted-text">{pendingFrets.length} strings selected -- this note will play as a chord.</p>
-          )}
-          {pendingFrets
-            .slice()
-            .sort((a, b) => a.string_number - b.string_number)
-            .map((fret) => (
-              <FretRowEditor
-                key={fret.string_number}
-                fret={fret}
-                onChange={(patch) => updatePendingFret(fret.string_number, patch)}
-                onRemove={() => togglePendingString(fret.string_number)}
-              />
-            ))}
-        </>
-      )}
-      <div className="form-row">
-        <label>
-          Duration
-          <select value={pendingDuration} onChange={(e) => setPendingDuration(Number(e.target.value))}>
-            {DURATION_OPTIONS.map((d) => (
-              <option key={d.value} value={d.value}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Lyric (optional)
-          <input
-            type="text"
-            value={pendingLyric}
-            disabled={pendingIsRest}
-            onChange={(e) => setPendingLyric(e.target.value)}
-          />
-        </label>
-      </div>
-      <button onClick={addNote} disabled={!pendingIsRest && pendingFrets.length === 0}>
-        + Add Note{pendingIsRest ? " (Rest)" : pendingFrets.length > 1 ? " (Chord)" : ""}
-      </button>
     </div>
   );
 }
+

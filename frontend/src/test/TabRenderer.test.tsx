@@ -64,7 +64,7 @@ describe("TabRenderer", () => {
     expect(onNoteClick).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }));
   });
 
-  it("renders rests as blank space on every string row (no fret digit shown)", () => {
+  it("renders a rest (a note blank on every string) as dashes, same as any other unfilled note", () => {
     const notes = [
       makeNote({ id: "a", position: 0, frets: [makeFret({ string_number: 3, fret: 2 })] }),
       makeNote({ id: "rest", position: 1, is_rest: true, frets: [], line_break: true }),
@@ -72,11 +72,70 @@ describe("TabRenderer", () => {
     const { container } = render(<TabRenderer notes={notes} />);
     const fretCells = container.querySelectorAll(".tab-fret-cell");
     const fretTexts = Array.from(fretCells).map((el) => el.textContent);
-    // The rest note must never show "0" (its placeholder fret) nor "-" on any
-    // of the 5 string rows -- only blank cells for its column.
+    // The rest note must never show "0" (its placeholder fret); its cells show "-".
     expect(fretTexts).not.toContain("0");
+    expect(fretTexts).toContain("-");
     // The other (real) note's fret should still render normally.
     expect(fretTexts).toContain("2");
+  });
+
+  it("editable mode: clicking a blank cell opens an inline input, and committing a fret updates the note", async () => {
+    const user = userEvent.setup();
+    const onFretChange = vi.fn();
+    const notes = [makeNote({ id: "a", position: 0, frets: [], line_break: true })];
+    const { container } = render(<TabRenderer notes={notes} onFretChange={onFretChange} />);
+
+    const cell = container.querySelector(".tab-fret-cell.clickable")!;
+    await user.click(cell);
+    const input = screen.getByLabelText("Fret for string 1");
+    await user.clear(input);
+    await user.type(input, "3");
+    await user.keyboard("{Enter}");
+
+    expect(onFretChange).toHaveBeenCalledWith("a", 1, 3);
+  });
+
+  it("editable mode: clearing a fret's inline input commits null (removes the string)", async () => {
+    const user = userEvent.setup();
+    const onFretChange = vi.fn();
+    const notes = [
+      makeNote({ id: "a", position: 0, frets: [makeFret({ string_number: 1, fret: 2 })], line_break: true }),
+    ];
+    const { container } = render(<TabRenderer notes={notes} onFretChange={onFretChange} />);
+
+    const cell = container.querySelector(".tab-fret-cell.clickable")!;
+    await user.click(cell);
+    const input = screen.getByLabelText("Fret for string 1");
+    await user.clear(input);
+    await user.keyboard("{Enter}");
+
+    expect(onFretChange).toHaveBeenCalledWith("a", 1, null);
+  });
+
+  it("editable mode: typing into the lyric input below a note calls onLyricChange", async () => {
+    const user = userEvent.setup();
+    const onLyricChange = vi.fn();
+    const notes = [makeNote({ id: "a", position: 0, frets: [], lyric: null, line_break: true })];
+    const { container } = render(
+      <TabRenderer notes={notes} onFretChange={vi.fn()} onLyricChange={onLyricChange} />,
+    );
+
+    const lyricInput = container.querySelector(".lyric-token-input") as HTMLInputElement;
+    await user.type(lyricInput, "Hi");
+    expect(onLyricChange).toHaveBeenCalled();
+  });
+
+  it("editable mode: clicking a note's duration marker calls onDurationCycle", async () => {
+    const user = userEvent.setup();
+    const onDurationCycle = vi.fn();
+    const notes = [makeNote({ id: "a", position: 0, frets: [], line_break: true })];
+    const { container } = render(
+      <TabRenderer notes={notes} onFretChange={vi.fn()} onDurationCycle={onDurationCycle} />,
+    );
+
+    const marker = container.querySelector(".duration-marker") as HTMLElement;
+    await user.click(marker);
+    expect(onDurationCycle).toHaveBeenCalledWith("a");
   });
 
   it("renders every string of a chord in the same column", () => {

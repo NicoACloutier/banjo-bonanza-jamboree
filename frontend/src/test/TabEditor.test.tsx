@@ -27,22 +27,30 @@ function Harness({ initialNotes = [] as NoteOut[] }: { initialNotes?: NoteOut[] 
   );
 }
 
+/** Click the first clickable fret cell for a given string row (1-indexed) and type a fret. */
+async function typeFret(
+  user: ReturnType<typeof userEvent.setup>,
+  container: HTMLElement,
+  stringNumber: number,
+  cellIndex: number,
+  value: string,
+) {
+  const stringRows = container.querySelectorAll(".tab-string-row");
+  const row = stringRows[stringNumber - 1] as HTMLElement;
+  const cells = row.querySelectorAll(".tab-fret-cell.clickable");
+  await user.click(cells[cellIndex]);
+  const input = screen.getByLabelText(`Fret for string ${stringNumber}`);
+  await user.clear(input);
+  if (value) await user.type(input, value);
+  await user.keyboard("{Enter}");
+}
+
 describe("TabEditor", () => {
-  it("adds a note with the selected string and fret when 'Add Note' is clicked", async () => {
+  it("starts with a blank (dash) note and allows adding more", async () => {
     const user = userEvent.setup();
-    const { container } = render(<Harness />);
-
-    // String 1 is selected by default; toggle to string 3 instead.
-    await user.click(screen.getByRole("button", { name: "Str 1" }));
-    await user.click(screen.getByRole("button", { name: "Str 3" }));
-    const fretInput = screen.getByLabelText(/^fret$/i);
-    await user.clear(fretInput);
-    await user.type(fretInput, "4");
-    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
-
-    const fretCells = container.querySelectorAll(".tab-fret-cell");
-    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
-    expect(fretTexts).toContain("4");
+    render(<Harness initialNotes={[createEmptyNote(0)]} />);
+    await user.click(screen.getByRole("button", { name: /\+ add 1 empty note/i }));
+    expect(screen.getAllByRole("option", { name: "Note 2" }).length).toBeGreaterThan(0);
   });
 
   it("allows editing metadata fields", async () => {
@@ -53,54 +61,60 @@ describe("TabEditor", () => {
     expect(songNameInput).toHaveValue("Cripple Creek");
   });
 
+  it("clicking a blank cell and typing a fret fills it in, and shows the edit panel", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+
+    await typeFret(user, container, 3, 0, "4");
+
+    expect(screen.getByText(/edit selected note/i)).toBeInTheDocument();
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
+    expect(fretTexts).toContain("4");
+  });
+
+  it("leaving a fret cell blank/backspaced reverts it back to '-' (a rest is just an all-dash note)", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+
+    // Fill in string 1, then clear it again.
+    await typeFret(user, container, 1, 0, "2");
+    let fretTexts = Array.from(container.querySelectorAll(".tab-fret-cell")).map((el) => el.textContent);
+    expect(fretTexts).toContain("2");
+
+    await typeFret(user, container, 1, 0, "");
+    fretTexts = Array.from(container.querySelectorAll(".tab-fret-cell")).map((el) => el.textContent);
+    expect(fretTexts.every((t) => t === "-")).toBe(true);
+  });
+
   it("selecting a note in the preview shows the edit panel and allows deletion", async () => {
     const user = userEvent.setup();
-    render(<Harness />);
-    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
-    await user.click(screen.getByText("0"));
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+    await typeFret(user, container, 1, 0, "0");
     expect(screen.getByText(/edit selected note/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /delete this note/i }));
     expect(screen.queryByText(/edit selected note/i)).not.toBeInTheDocument();
   });
 
-  it("adds a rest note (no fret digit rendered) when the rest checkbox is checked", async () => {
+  it("supports selecting multiple strings on the same note to create a chord", async () => {
     const user = userEvent.setup();
-    const { container } = render(<Harness />);
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
 
-    await user.click(screen.getByLabelText(/this is a rest/i));
-    await user.click(screen.getByRole("button", { name: /\+ add note \(rest\)/i }));
+    await typeFret(user, container, 1, 0, "0");
+    await typeFret(user, container, 2, 0, "1");
+    await typeFret(user, container, 3, 0, "2");
 
-    const fretCells = container.querySelectorAll(".tab-fret-cell");
-    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
-    // A rest never shows a digit, so none of the string rows should show "0".
-    expect(fretTexts).not.toContain("0");
-    expect(fretTexts.every((t) => t === "")).toBe(true);
-  });
-
-  it("supports selecting multiple strings to create a chord", async () => {
-    const user = userEvent.setup();
-    const { container } = render(<Harness />);
-
-    // String 1 is selected by default; add strings 2 and 3 for a 3-note chord.
-    await user.click(screen.getByRole("button", { name: "Str 2" }));
-    await user.click(screen.getByRole("button", { name: "Str 3" }));
     expect(screen.getByText(/3 strings selected/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /\+ add note \(chord\)/i }));
-
     const chordCells = container.querySelectorAll(".tab-fret-cell.chord-member");
     expect(chordCells).toHaveLength(3);
   });
 
   it("supports marking a note with a hammer-on technique, rendered with an 'h' suffix", async () => {
     const user = userEvent.setup();
-    const { container } = render(<Harness />);
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
 
-    const fretInput = screen.getByLabelText(/^fret$/i);
-    await user.clear(fretInput);
-    await user.type(fretInput, "2");
+    await typeFret(user, container, 1, 0, "2");
     await user.selectOptions(screen.getByLabelText(/technique/i), "hammer_on");
-    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
 
     const fretCells = container.querySelectorAll(".tab-fret-cell");
     const fretTexts = Array.from(fretCells).map((el) => el.textContent);
@@ -109,17 +123,14 @@ describe("TabEditor", () => {
 
   it("supports marking a note with a slide technique and slide-to-fret, rendered as '<fret>s<target>'", async () => {
     const user = userEvent.setup();
-    const { container } = render(<Harness />);
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
 
-    const fretInput = screen.getByLabelText(/^fret$/i);
-    await user.clear(fretInput);
-    await user.type(fretInput, "2");
+    await typeFret(user, container, 1, 0, "2");
     await user.selectOptions(screen.getByLabelText(/technique/i), "slide");
 
     const slideInput = screen.getByLabelText(/slide to fret/i);
     await user.clear(slideInput);
     await user.type(slideInput, "5");
-    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
 
     const fretCells = container.querySelectorAll(".tab-fret-cell");
     const fretTexts = Array.from(fretCells).map((el) => el.textContent);
@@ -128,17 +139,14 @@ describe("TabEditor", () => {
 
   it("supports marking a note with a bend technique and bend amount, rendered as '<fret>b<semitones>'", async () => {
     const user = userEvent.setup();
-    const { container } = render(<Harness />);
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
 
-    const fretInput = screen.getByLabelText(/^fret$/i);
-    await user.clear(fretInput);
-    await user.type(fretInput, "3");
+    await typeFret(user, container, 1, 0, "3");
     await user.selectOptions(screen.getByLabelText(/technique/i), "bend");
 
     const bendInput = screen.getByLabelText(/bend up/i);
     await user.clear(bendInput);
     await user.type(bendInput, "2");
-    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
 
     const fretCells = container.querySelectorAll(".tab-fret-cell");
     const fretTexts = Array.from(fretCells).map((el) => el.textContent);
@@ -147,14 +155,11 @@ describe("TabEditor", () => {
 
   it("supports marking a note with drop-thumb technique and a roll-pattern finger annotation", async () => {
     const user = userEvent.setup();
-    const { container } = render(<Harness />);
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
 
-    const fretInput = screen.getByLabelText(/^fret$/i);
-    await user.clear(fretInput);
-    await user.type(fretInput, "5");
+    await typeFret(user, container, 1, 0, "5");
     await user.selectOptions(screen.getByLabelText(/technique/i), "drop_thumb");
     await user.selectOptions(screen.getByLabelText(/roll finger/i), "thumb");
-    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
 
     const fretCells = container.querySelectorAll(".tab-fret-cell");
     const fretTexts = Array.from(fretCells).map((el) => el.textContent);
@@ -172,18 +177,33 @@ describe("TabEditor", () => {
     expect(capoInput).toHaveValue(3);
   });
 
+  it("typing a lyric into the box below a note updates it", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+
+    const lyricInput = container.querySelector(".lyric-token-input") as HTMLInputElement;
+    await user.type(lyricInput, "Hello");
+    expect(lyricInput).toHaveValue("Hello");
+  });
+
+  it("clicking a note's duration marker cycles its duration", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+
+    const marker = container.querySelector(".duration-marker") as HTMLElement;
+    expect(marker.textContent).toBe(""); // default quarter note has no visible label
+    await user.click(marker);
+    expect(marker.textContent).toBe("half");
+    await user.click(marker);
+    expect(marker.textContent).toBe("whole");
+  });
+
   it("supports copying a range of notes and pasting them elsewhere (e.g. to reuse a chorus)", async () => {
     const user = userEvent.setup();
-    const { container } = render(<Harness />);
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0), createEmptyNote(1)]} />);
 
-    // Add two notes: fret 1 then fret 2.
-    const fretInput = screen.getByLabelText(/^fret$/i);
-    await user.clear(fretInput);
-    await user.type(fretInput, "1");
-    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
-    await user.clear(fretInput);
-    await user.type(fretInput, "2");
-    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
+    await typeFret(user, container, 1, 0, "1");
+    await typeFret(user, container, 1, 1, "2");
 
     // Copy the range "Note 1" through "Note 2".
     await user.selectOptions(screen.getByLabelText(/range start/i), "Note 1");
@@ -203,9 +223,7 @@ describe("TabEditor", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await user.click(screen.getByRole("button", { name: /\+ add 1 empty note/i }));
-    // An empty note is a non-rest placeholder -- no strings filled in yet, so it renders as dashes.
     await user.click(screen.getByRole("button", { name: /\+ add 1 empty note/i }));
-    // Both the range-start and range-end dropdowns should now list 2 notes.
     expect(screen.getAllByRole("option", { name: "Note 2" }).length).toBeGreaterThan(0);
   });
 
@@ -215,28 +233,6 @@ describe("TabEditor", () => {
     await user.click(screen.getByRole("button", { name: /\+ add a line/i }));
     expect(screen.getAllByRole("option", { name: "Note 16" }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("option", { name: "Note 17" })).not.toBeInTheDocument();
-  });
-
-  it("a freshly-added empty note can be clicked and filled in with a string/fret", async () => {
-    const user = userEvent.setup();
-    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
-
-    // The empty note renders as dash fret cells (it's a non-rest placeholder); click one to select it.
-    const firstCell = container.querySelector(".tab-fret-cell.clickable")!;
-    await user.click(firstCell);
-    expect(screen.getByText(/edit selected note/i)).toBeInTheDocument();
-
-    // It already starts as a non-rest note, so the string picker is already visible --
-    // pick string 1 and set fret 3.
-    const editPanel = screen.getByText(/edit selected note/i).closest(".panel") as HTMLElement;
-    await user.click(within(editPanel).getByRole("button", { name: "Str 1" }));
-    const fretInputs = screen.getAllByLabelText(/^fret$/i);
-    await user.clear(fretInputs[0]);
-    await user.type(fretInputs[0], "3");
-
-    const fretCells = container.querySelectorAll(".tab-fret-cell");
-    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
-    expect(fretTexts).toContain("3");
   });
 
   it("removes a note via the 'Delete this note' button after selecting it", async () => {

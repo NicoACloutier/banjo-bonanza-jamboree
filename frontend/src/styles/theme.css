@@ -268,6 +268,48 @@ label select {
   text-decoration: underline dotted var(--ember-dark);
 }
 
+/* Inline fret-entry input (editable mode): replaces a fret cell in place
+   while the user is typing a fret number for that string/note. */
+.tab-fret-cell-input {
+  width: 2.6rem;
+  height: 1.5rem;
+  margin-right: 0.15rem;
+  padding: 0;
+  text-align: center;
+  font-weight: bold;
+  font-size: 0.85rem;
+  border: 1px solid var(--ember-dark);
+  border-radius: 3px;
+  background-color: var(--parchment-dark);
+}
+
+/* Unobtrusive note-duration marker row (editable mode only): tiny text
+   above the strings, blank for the default quarter-note duration so it
+   doesn't clutter notes that don't need it. */
+.tab-duration-row {
+  display: flex;
+  white-space: nowrap;
+  line-height: 0.9rem;
+  margin-left: 1.5rem;
+}
+
+.duration-marker {
+  width: 2.6rem;
+  margin-right: 0.15rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--wood-plank);
+  font-size: 0.6rem;
+  font-style: italic;
+  text-align: center;
+  cursor: pointer;
+}
+
+.duration-marker:hover {
+  color: var(--ember-dark);
+}
+
 .tab-lyrics-row {
   margin-top: 0.4rem;
   color: var(--ember-dark);
@@ -325,6 +367,27 @@ label select {
   display: inline-block;
   width: 2.25rem;
   overflow: visible;
+}
+
+/* Inline lyric input (editable mode): a borderless text box directly
+   below its note, so lyrics can be typed in place under the tab. */
+.lyric-token-input {
+  display: inline-block;
+  width: 2.6rem;
+  margin-right: 0.15rem;
+  padding: 0;
+  border: none;
+  border-bottom: 1px dashed var(--wood-plank);
+  background: none;
+  color: var(--ember-dark);
+  font-style: italic;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+}
+
+.lyric-token-input:focus {
+  border-bottom: 1px solid var(--ember-dark);
+  outline: none;
 }
 
 /* ---- Playback / editor toolbars ---- */

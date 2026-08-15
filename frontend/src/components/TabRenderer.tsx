@@ -13,14 +13,37 @@
  *   - pull-off:   "2p0"
  *   - slide:      "2s4"  (slides from the fret shown into `slide_to_fret`)
  *
- * Also supports an "editable" mode, in which each fret cell is clickable
- * (used by the editor to select which note to edit) and the currently
- * selected note is highlighted.
+ * Also supports an "editable" mode (when `onFretEdit` is supplied), in
+ * which:
+ *   - clicking a fret cell turns it into a small text input in place, so
+ *     the fret for that string/note can be typed directly (no separate
+ *     "pick a string" buttons elsewhere in the UI). Clicking a blank "-"
+ *     cell activates that string at fret 0 and opens it for editing;
+ *     clearing the input (e.g. backspacing to empty) removes the string
+ *     from the note again, reverting the cell to "-".
+ *   - the lyric row becomes a row of small text inputs, so lyrics are
+ *     typed directly below the note they belong to.
+ *   - an unobtrusive duration marker above each note's strings can be
+ *     clicked to cycle through note durations.
+ * A note with no strings fretted at all (all "-") is, semantically, a
+ * rest -- there's no separate "mark as rest" control; a fully blank note
+ * simply plays no sound.
  */
+import { useState } from "react";
 import { splitIntoLines } from "../lib/tabLayout";
 import type { NoteFretOut, NoteOut } from "../types/api";
 
 const STRING_LABELS = ["1", "2", "3", "4", "5"];
+
+/** Unobtrusive abbreviation shown above a note for non-default durations; blank (default) for a quarter note. */
+const DURATION_ABBR: Record<number, string> = {
+  0.25: "16th",
+  0.5: "8th",
+  1: "",
+  2: "half",
+  4: "whole",
+};
+
 
 const TECHNIQUE_SUFFIX: Record<NoteFretOut["technique"], string> = {
   normal: "",
@@ -62,19 +85,84 @@ interface TabRendererProps {
   playingNoteId?: string | null;
   selectedNoteId?: string | null;
   onNoteClick?: (note: NoteOut) => void;
+  /**
+   * Supplying this callback switches the renderer into editable mode.
+   * Called when the user commits a fret value for one string of one note
+   * -- `fret === null` means "remove this string from the note" (i.e. the
+   * cell reverts to a blank "-"), otherwise it's the new fret number.
+   */
+  onFretChange?: (noteId: string, stringNumber: number, fret: number | null) => void;
+  /** Called when the user edits the lyric text below a note (editable mode only). */
+  onLyricChange?: (noteId: string, lyric: string) => void;
+  /** Called when the user clicks a note's duration marker to cycle its duration (editable mode only). */
+  onDurationCycle?: (noteId: string) => void;
 }
 
-export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick }: TabRendererProps) {
+/** Which single cell (note + string) is currently showing an inline `<input>` instead of static text. */
+interface EditingCell {
+  noteId: string;
+  stringNumber: number;
+}
+
+export function TabRenderer({
+  notes,
+  playingNoteId,
+  selectedNoteId,
+  onNoteClick,
+  onFretChange,
+  onLyricChange,
+  onDurationCycle,
+}: TabRendererProps) {
+  const editable = Boolean(onFretChange);
+  const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+
   const lines = splitIntoLines(notes);
 
   if (lines.length === 0) {
     return <p className="muted-text">No notes yet -- add some below to start your tab.</p>;
   }
 
+  /** Commit whatever's currently typed in the active inline `<input>` back onto the note, then close it. */
+  const commitEditingCell = () => {
+    if (!editingCell || !onFretChange) return;
+    const trimmed = editingValue.trim();
+    if (trimmed === "") {
+      // Left blank (or backspaced to empty): remove the string -- cell reverts to "-".
+      onFretChange(editingCell.noteId, editingCell.stringNumber, null);
+    } else {
+      const parsed = Number(trimmed);
+      onFretChange(editingCell.noteId, editingCell.stringNumber, Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0);
+    }
+    setEditingCell(null);
+    setEditingValue("");
+  };
+
   return (
     <div className="tab-sheet">
       {lines.map((line, lineIndex) => (
         <div className="tab-line" key={lineIndex} data-line-index={lineIndex}>
+          {editable && (
+            <div className="tab-duration-row">
+              {line.map((note) => {
+                const abbr = DURATION_ABBR[note.duration_beats] ?? `${note.duration_beats}b`;
+                return (
+                  <button
+                    key={note.id}
+                    type="button"
+                    className="duration-marker"
+                    title="Click to change this note's duration"
+                    onClick={() => {
+                      onNoteClick?.(note);
+                      onDurationCycle?.(note.id);
+                    }}
+                  >
+                    {abbr}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {STRING_LABELS.map((label, stringIdx) => {
             const stringNumber = stringIdx + 1;
             return (
@@ -85,6 +173,35 @@ export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick 
                   const isPlaying = note.id === playingNoteId;
                   const isSelected = note.id === selectedNoteId;
                   const isChord = note.frets.length > 1;
+                  const isEditingThisCell =
+                    editingCell?.noteId === note.id && editingCell?.stringNumber === stringNumber;
+
+                  if (isEditingThisCell) {
+                    return (
+                      <input
+                        key={note.id}
+                        className="tab-fret-cell tab-fret-cell-input"
+                        type="text"
+                        inputMode="numeric"
+                        autoFocus
+                        value={editingValue}
+                        aria-label={`Fret for string ${stringNumber}`}
+                        onChange={(e) => setEditingValue(e.target.value.replace(/[^0-9]/g, ""))}
+                        onBlur={commitEditingCell}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitEditingCell();
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            setEditingCell(null);
+                            setEditingValue("");
+                          }
+                        }}
+                      />
+                    );
+                  }
+
                   return (
                     <span
                       key={note.id}
@@ -92,23 +209,32 @@ export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick 
                         "tab-fret-cell",
                         isPlaying ? "playing" : "",
                         isSelected ? "selected" : "",
-                        onNoteClick ? "clickable" : "",
+                        onNoteClick || editable ? "clickable" : "",
                         fretOnThisString && isChord ? "chord-member" : "",
                         fretOnThisString?.technique === "drop_thumb" ? "drop-thumb" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
                       style={isSelected ? { outline: "2px solid var(--ember-dark)" } : undefined}
-                      onClick={onNoteClick ? () => onNoteClick(note) : undefined}
+                      onClick={() => {
+                        onNoteClick?.(note);
+                        if (editable) {
+                          setEditingCell({ noteId: note.id, stringNumber });
+                          // Clicking a blank "-" cell activates that string at fret 0 (shown
+                          // immediately); an existing fret is edited in place. Backspacing the
+                          // input back to empty removes the string again (reverts to "-").
+                          setEditingValue(fretOnThisString ? String(fretOnThisString.fret) : "0");
+                        }
+                      }}
                       title={
-                        onNoteClick
-                          ? note.is_rest
-                            ? "Click to select/edit this rest"
+                        onNoteClick || editable
+                          ? editable
+                            ? "Click to type a fret for this string"
                             : "Click to select/edit this note"
                           : undefined
                       }
                     >
-                      {note.is_rest ? "" : fretOnThisString ? fretCellText(fretOnThisString) : "-"}
+                      {fretOnThisString ? fretCellText(fretOnThisString) : "-"}
                     </span>
                   );
                 })}
@@ -116,11 +242,24 @@ export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick 
             );
           })}
           <div className="tab-lyrics-row">
-            {line.map((note) => (
-              <span className="lyric-token" key={note.id}>
-                {note.lyric ?? ""}
-              </span>
-            ))}
+            {line.map((note) =>
+              editable ? (
+                <input
+                  key={note.id}
+                  className="lyric-token lyric-token-input"
+                  type="text"
+                  value={note.lyric ?? ""}
+                  placeholder=""
+                  aria-label="Lyric at this note"
+                  onFocus={() => onNoteClick?.(note)}
+                  onChange={(e) => onLyricChange?.(note.id, e.target.value)}
+                />
+              ) : (
+                <span className="lyric-token" key={note.id}>
+                  {note.lyric ?? ""}
+                </span>
+              ),
+            )}
           </div>
         </div>
       ))}
