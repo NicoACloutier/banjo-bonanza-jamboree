@@ -1,12 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { TabEditor, type TabMetadata } from "../components/TabEditor";
+import { TabEditor, createEmptyNote, type TabMetadata } from "../components/TabEditor";
 import { FALLBACK_TUNINGS } from "../lib/tunings";
 import type { NoteOut } from "../types/api";
 
-function Harness() {
+function Harness({ initialNotes = [] as NoteOut[] }: { initialNotes?: NoteOut[] }) {
   const [metadata, setMetadata] = useState<TabMetadata>({
     songName: "",
     artist: "",
@@ -15,7 +15,7 @@ function Harness() {
     tempoBpm: 100,
     capoFret: 0,
   });
-  const [notes, setNotes] = useState<NoteOut[]>([]);
+  const [notes, setNotes] = useState<NoteOut[]>(initialNotes);
   return (
     <TabEditor
       tunings={FALLBACK_TUNINGS}
@@ -197,5 +197,60 @@ describe("TabEditor", () => {
       .filter((t) => t !== "" && t !== "-");
     // The 2-note range should now appear twice: [1, 2, 1, 2].
     expect(fretTexts).toEqual(["1", "2", "1", "2"]);
+  });
+
+  it("adds 1 empty note at a time via the '+ Add 1 empty note' button", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: /\+ add 1 empty note/i }));
+    // An empty note is a rest -- no strings are filled in, so it renders as blank cells.
+    await user.click(screen.getByRole("button", { name: /\+ add 1 empty note/i }));
+    // Both the range-start and range-end dropdowns should now list 2 notes.
+    expect(screen.getAllByRole("option", { name: "Note 2" }).length).toBeGreaterThan(0);
+  });
+
+  it("adds 10 empty notes at once via the '+ Add 10 empty notes' button", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: /\+ add 10 empty notes/i }));
+    expect(screen.getAllByRole("option", { name: "Note 10" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("option", { name: "Note 11" })).not.toBeInTheDocument();
+  });
+
+  it("a freshly-added empty note can be clicked and filled in with a string/fret", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+
+    // The empty note renders as blank fret cells; click the first one to select it.
+    const firstCell = container.querySelector(".tab-fret-cell.clickable")!;
+    await user.click(firstCell);
+    expect(screen.getByText(/edit selected note/i)).toBeInTheDocument();
+
+    // Uncheck "this is a rest" (in the "Edit selected note" panel) to reveal
+    // the string picker, then pick string 1 and set fret 3.
+    const restCheckboxes = screen.getAllByLabelText(/this is a rest/i);
+    await user.click(restCheckboxes[0]);
+    const editPanel = screen.getByText(/edit selected note/i).closest(".panel") as HTMLElement;
+    await user.click(within(editPanel).getByRole("button", { name: "Str 1" }));
+    const fretInputs = screen.getAllByLabelText(/^fret$/i);
+    await user.clear(fretInputs[0]);
+    await user.type(fretInputs[0], "3");
+
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
+    expect(fretTexts).toContain("3");
+  });
+
+  it("removes a note via the 'Delete this note' button after selecting it", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0), createEmptyNote(1)]} />);
+
+    const firstCell = container.querySelectorAll(".tab-fret-cell.clickable")[0];
+    await user.click(firstCell);
+    expect(screen.getByText(/edit selected note/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /delete this note/i }));
+
+    expect(screen.queryByRole("option", { name: "Note 2" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("option", { name: "Note 1" }).length).toBeGreaterThan(0);
   });
 });

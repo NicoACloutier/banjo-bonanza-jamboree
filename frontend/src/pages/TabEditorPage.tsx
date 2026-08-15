@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { TabEditor, type TabMetadata } from "../components/TabEditor";
+import { TabEditor, type TabMetadata, createEmptyNote } from "../components/TabEditor";
 import { useAuth } from "../hooks/useAuth";
 import { TabsApi } from "../lib/api";
 import { ApiRequestError } from "../lib/apiClient";
@@ -45,7 +45,11 @@ export function TabEditorPage() {
     tempoBpm: 100,
     capoFret: 0,
   });
-  const [notes, setNotes] = useState<NoteOut[]>([]);
+  const [notes, setNotes] = useState<NoteOut[]>(() =>
+    // New tabs start with 10 empty (rest) note slots the user can click to
+    // fill in one at a time, so the song's length can be laid out up front.
+    Array.from({ length: 10 }, (_, i) => createEmptyNote(i)),
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(isEditing);

@@ -61,6 +61,25 @@ function createNoteId(): string {
     : `note-${Math.random().toString(36).slice(2)}`;
 }
 
+/**
+ * A blank placeholder note: rendered as an empty (rest) slot in the
+ * preview until the user clicks it and fills in strings/frets. This is
+ * what a freshly-created tab is pre-populated with, and what "+ Add empty
+ * note(s)" appends -- letting users lay out the song's length first and
+ * fill in the actual notes afterward.
+ */
+export function createEmptyNote(position: number): NoteOut {
+  return {
+    id: createNoteId(),
+    position,
+    duration_beats: 1,
+    line_break: false,
+    lyric: null,
+    is_rest: true,
+    frets: [],
+  };
+}
+
 /** Editor for one string's fret/technique within a (possibly chordal) note slot. */
 function FretRowEditor({
   fret,
@@ -313,6 +332,11 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       </div>
 
       <h3>Tab preview</h3>
+      <p className="muted-text">
+        Click any empty slot below to fill in its strings/frets, or click a filled note to edit it. Use the
+        buttons below to add more empty slots to the end of the song, or select a note above and click "Delete
+        this note" to remove it.
+      </p>
       <TabRenderer
         notes={notes}
         selectedNoteId={selectedNoteId}
@@ -320,6 +344,27 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
           setSelectedNoteId(note.id);
         }}
       />
+      <div className="toolbar">
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => onNotesChange([...notes, createEmptyNote(notes.length)])}
+        >
+          + Add 1 empty note
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() =>
+            onNotesChange([
+              ...notes,
+              ...Array.from({ length: 10 }, (_, i) => createEmptyNote(notes.length + i)),
+            ])
+          }
+        >
+          + Add 10 empty notes
+        </button>
+      </div>
 
       <div className="panel">
         <h3>Copy / paste a range</h3>
