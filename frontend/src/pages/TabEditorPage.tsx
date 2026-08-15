@@ -24,6 +24,8 @@ function notesToNoteIn(notes: NoteOut[]): NoteIn[] {
       fret: f.fret,
       technique: f.technique,
       slide_to_fret: f.slide_to_fret,
+      bend_semitones: f.bend_semitones,
+      right_hand_finger: f.right_hand_finger,
     })),
   }));
 }
@@ -41,6 +43,7 @@ export function TabEditorPage() {
     album: "",
     tuningKey: FALLBACK_TUNINGS[0].key,
     tempoBpm: 100,
+    capoFret: 0,
   });
   const [notes, setNotes] = useState<NoteOut[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +68,7 @@ export function TabEditorPage() {
           album: tab.album ?? "",
           tuningKey: tab.tuning_key,
           tempoBpm: tab.tempo_bpm,
+          capoFret: tab.capo_fret,
         });
         setNotes(tab.notes);
       })
@@ -91,6 +95,7 @@ export function TabEditorPage() {
           album: metadata.album.trim() || null,
           tuning_key: metadata.tuningKey,
           tempo_bpm: metadata.tempoBpm,
+          capo_fret: metadata.capoFret,
           notes: notesToNoteIn(notes),
           publish,
         };

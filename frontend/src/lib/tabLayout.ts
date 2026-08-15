@@ -14,6 +14,8 @@ export interface SoundEvent {
   frequency: number;
   /** Present only for slides: the frequency the pitch glides to. */
   slideToFrequency?: number;
+  /** Present only for bends: the frequency the pitch bends up to. */
+  bendToFrequency?: number;
 }
 
 export interface TimedNote extends NoteOut {
@@ -34,12 +36,18 @@ export interface TimedNote extends NoteOut {
  * produce no sound. A chord (a note with multiple frets) produces a single
  * schedule entry whose `sounds` array has one item per string, all sharing
  * the same start time so they ring out together.
+ *
+ * `capoFret` raises every string's sounding pitch by that many frets (a
+ * physical capo shortens the vibrating string length), independent of
+ * `transposeSemitones` (which is purely a playback preview, e.g. "hear
+ * this tuning down 1 fret" -- it does not reflect a physical capo).
  */
 export function computePlaybackSchedule(
   notes: NoteOut[],
   tuning: TuningOut,
   tempoBpm: number,
   transposeSemitones: number,
+  capoFret = 0,
 ): TimedNote[] {
   const secondsPerBeat = 60 / tempoBpm;
   const sorted = [...notes].sort((a, b) => a.position - b.position);
@@ -55,7 +63,8 @@ export function computePlaybackSchedule(
         // stale/malformed client-side data) must not crash the whole
         // schedule -- skip just this string's sound rather than throwing.
         if (openString === undefined) continue;
-        const frequency = frettedFrequency(openString, fretEvent.fret, transposeSemitones);
+        const effectiveFret = fretEvent.fret + capoFret;
+        const frequency = frettedFrequency(openString, effectiveFret, transposeSemitones);
         const sound: SoundEvent = {
           stringNumber: fretEvent.string_number,
           fret: fretEvent.fret,
@@ -63,7 +72,14 @@ export function computePlaybackSchedule(
           frequency,
         };
         if (fretEvent.technique === "slide" && fretEvent.slide_to_fret != null) {
-          sound.slideToFrequency = frettedFrequency(openString, fretEvent.slide_to_fret, transposeSemitones);
+          sound.slideToFrequency = frettedFrequency(
+            openString,
+            fretEvent.slide_to_fret + capoFret,
+            transposeSemitones,
+          );
+        }
+        if (fretEvent.technique === "bend" && fretEvent.bend_semitones != null) {
+          sound.bendToFrequency = frequency * Math.pow(2, fretEvent.bend_semitones / 12);
         }
         sounds.push(sound);
       }

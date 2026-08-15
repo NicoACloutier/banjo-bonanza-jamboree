@@ -5,7 +5,15 @@ import { TabRenderer } from "../components/TabRenderer";
 import type { NoteFretIn, NoteOut } from "../types/api";
 
 function makeFret(overrides: Partial<NoteFretIn> = {}): NoteFretIn {
-  return { string_number: 1, fret: 0, technique: "normal", slide_to_fret: null, ...overrides };
+  return {
+    string_number: 1,
+    fret: 0,
+    technique: "normal",
+    slide_to_fret: null,
+    bend_semitones: null,
+    right_hand_finger: null,
+    ...overrides,
+  };
 }
 
 function makeNote(overrides: Partial<NoteOut>): NoteOut {

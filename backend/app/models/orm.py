@@ -77,6 +77,10 @@ class Tab(Base):
     album: Mapped[str | None] = mapped_column(String(200), nullable=True)
     tuning_key: Mapped[str] = mapped_column(String(32), nullable=False)
     tempo_bpm: Mapped[int] = mapped_column(Integer, default=100)
+    # Capo position in frets (0 = no capo). Raises the sounding pitch of
+    # every string by this many frets, independent of the "transpose to
+    # hear a different tuning" playback control.
+    capo_fret: Mapped[int] = mapped_column(Integer, default=0)
 
     status: Mapped[TabStatus] = mapped_column(
         Enum(TabStatus, native_enum=False), default=TabStatus.draft, index=True
@@ -93,6 +97,9 @@ class Tab(Base):
     )
     lyrics: Mapped[list["Lyric"]] = relationship(back_populates="tab", cascade="all, delete-orphan")
     votes: Mapped[list["Vote"]] = relationship(back_populates="tab", cascade="all, delete-orphan")
+    revisions: Mapped[list["TabRevision"]] = relationship(
+        back_populates="tab", cascade="all, delete-orphan", order_by="TabRevision.created_at"
+    )
 
 
 class Note(Base):
@@ -134,6 +141,18 @@ class NoteTechnique(str, enum.Enum):
     hammer_on = "hammer_on"
     pull_off = "pull_off"
     slide = "slide"
+    bend = "bend"
+    # Clawhammer "drop-thumb": the thumb leaves the 5th string to strike a
+    # lower string mid-roll, rather than the usual thumb-on-5th-string roll.
+    drop_thumb = "drop_thumb"
+
+
+class RightHandFinger(str, enum.Enum):
+    """Which right-hand digit plucks this string, for clawhammer/roll-pattern annotation."""
+
+    thumb = "thumb"
+    index = "index"
+    middle = "middle"
 
 
 class NoteFret(Base):
@@ -144,8 +163,14 @@ class NoteFret(Base):
     `technique` marks how this fret is sounded: a plain pick/pluck
     ("normal"), a hammer-on or pull-off from the previous note on the same
     string (played legato, with a softer/quicker attack and no separate
-    pick-pluck sound), or a slide into `slide_to_fret` (a continuous pitch
-    glide from `fret` to `slide_to_fret` over the note's duration).
+    pick-pluck sound), a slide into `slide_to_fret` (a continuous pitch
+    glide from `fret` to `slide_to_fret` over the note's duration), a
+    string "bend" (a pitch rise of `bend_semitones` without changing fret),
+    or a clawhammer "drop-thumb" stroke (annotation only; sounds like a
+    normal pluck but marks a specific right-hand technique in the tab).
+
+    `right_hand_finger` is an optional annotation (thumb/index/middle) used
+    to notate clawhammer roll patterns; it does not affect playback sound.
     """
 
     __tablename__ = "note_frets"
@@ -160,6 +185,13 @@ class NoteFret(Base):
     )
     # Only meaningful when technique == slide: the fret slid *into*.
     slide_to_fret: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Only meaningful when technique == bend: how many semitones the pitch
+    # rises to, over the note's duration (e.g. 1 = a half-step bend).
+    bend_semitones: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Optional right-hand annotation for roll patterns (thumb/index/middle).
+    right_hand_finger: Mapped[RightHandFinger | None] = mapped_column(
+        Enum(RightHandFinger, native_enum=False), nullable=True
+    )
 
     note: Mapped[Note] = relationship(back_populates="frets")
 
@@ -192,3 +224,24 @@ class Vote(Base):
 
     tab: Mapped[Tab] = relationship(back_populates="votes")
     user: Mapped[User] = relationship(back_populates="votes")
+
+
+class TabRevision(Base):
+    """
+    A snapshot of a tab's editable fields (metadata + notes), taken every
+    time an owner saves an update. Lets an owner browse history and restore
+    an earlier version (e.g. after accidentally overwriting a verse).
+
+    The snapshot is stored as a single JSON-encoded text blob (msgspec's
+    `TabUpdateRequest` shape) rather than normalized rows, since revisions
+    are read/restored wholesale and never queried piecemeal.
+    """
+
+    __tablename__ = "tab_revisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
+    tab_id: Mapped[str] = mapped_column(ForeignKey("tabs.id", ondelete="CASCADE"), index=True)
+    snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    tab: Mapped[Tab] = relationship(back_populates="revisions")

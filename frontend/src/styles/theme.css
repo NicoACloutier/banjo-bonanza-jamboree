@@ -262,11 +262,64 @@ label select {
   background-color: var(--parchment-dark);
 }
 
+/* Drop-thumb (clawhammer right-hand technique annotation): underline the
+   cell with a dotted rule instead of changing the fret number itself. */
+.tab-fret-cell.drop-thumb {
+  text-decoration: underline dotted var(--ember-dark);
+}
+
 .tab-lyrics-row {
   margin-top: 0.4rem;
   color: var(--ember-dark);
   font-style: italic;
 }
+
+/* ---- Print / PDF export ----
+   Hides interactive chrome (nav, toolbars, forms) and prints just the tab
+   sheet itself, in plain black-on-white for legibility on paper. */
+@media print {
+  body {
+    background: none;
+  }
+  .no-print,
+  nav,
+  .app-nav {
+    display: none !important;
+  }
+  .tab-sheet {
+    color: #000;
+    overflow-x: visible;
+  }
+  .panel {
+    box-shadow: none;
+    background: #fff;
+    color: #000;
+  }
+}
+
+/* ---- Mobile-responsive layout ----
+   Per product requirements, only *viewing/playing* a tab needs to be
+   usable on small screens; the tab-creation editor remains desktop-first. */
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 0.75rem 0.5rem 2rem;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .tab-view-page .tab-sheet {
+    font-size: 0.75rem;
+  }
+
+  .tab-fret-cell {
+    width: 2rem;
+  }
+}
+
 
 .lyric-token {
   display: inline-block;

@@ -11,7 +11,7 @@
  */
 import { useMemo, useState } from "react";
 import { TabRenderer } from "./TabRenderer";
-import type { NoteFretIn, NoteOut, Technique, TuningOut } from "../types/api";
+import type { NoteFretIn, NoteOut, RightHandFinger, Technique, TuningOut } from "../types/api";
 
 export interface TabMetadata {
   songName: string;
@@ -19,6 +19,8 @@ export interface TabMetadata {
   album: string;
   tuningKey: string;
   tempoBpm: number;
+  /** Physical capo position (0 = no capo), 0-12 frets. */
+  capoFret: number;
 }
 
 interface TabEditorProps {
@@ -42,6 +44,15 @@ const TECHNIQUE_OPTIONS: { label: string; value: Technique }[] = [
   { label: "Hammer-on", value: "hammer_on" },
   { label: "Pull-off", value: "pull_off" },
   { label: "Slide", value: "slide" },
+  { label: "Bend/choke", value: "bend" },
+  { label: "Drop-thumb (clawhammer)", value: "drop_thumb" },
+];
+
+const FINGER_OPTIONS: { label: string; value: RightHandFinger | "" }[] = [
+  { label: "(none)", value: "" },
+  { label: "Thumb", value: "thumb" },
+  { label: "Index", value: "index" },
+  { label: "Middle", value: "middle" },
 ];
 
 function createNoteId(): string {
@@ -82,6 +93,7 @@ function FretRowEditor({
             onChange({
               technique,
               slide_to_fret: technique === "slide" ? fret.slide_to_fret ?? fret.fret + 2 : null,
+              bend_semitones: technique === "bend" ? fret.bend_semitones ?? 1 : null,
             });
           }}
         >
@@ -104,6 +116,31 @@ function FretRowEditor({
           />
         </label>
       )}
+      {fret.technique === "bend" && (
+        <label>
+          Bend up (semitones)
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={fret.bend_semitones ?? 1}
+            onChange={(e) => onChange({ bend_semitones: Number(e.target.value) })}
+          />
+        </label>
+      )}
+      <label>
+        Roll finger (optional)
+        <select
+          value={fret.right_hand_finger ?? ""}
+          onChange={(e) => onChange({ right_hand_finger: (e.target.value || null) as RightHandFinger | null })}
+        >
+          {FINGER_OPTIONS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <button type="button" className="secondary" onClick={onRemove}>
         Remove string
       </button>
@@ -114,12 +151,18 @@ function FretRowEditor({
 export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesChange }: TabEditorProps) {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [pendingFrets, setPendingFrets] = useState<NoteFretIn[]>([
-    { string_number: 1, fret: 0, technique: "normal", slide_to_fret: null },
+    { string_number: 1, fret: 0, technique: "normal", slide_to_fret: null, bend_semitones: null, right_hand_finger: null },
   ]);
   const [pendingDuration, setPendingDuration] = useState(1);
   const [pendingLineBreak, setPendingLineBreak] = useState(false);
   const [pendingLyric, setPendingLyric] = useState("");
   const [pendingIsRest, setPendingIsRest] = useState(false);
+  // Copy/paste: a contiguous range of note ids the user has copied, so a
+  // chorus (etc.) can be reused elsewhere without retabbing it -- only the
+  // lyric typically needs editing afterward.
+  const [rangeStartId, setRangeStartId] = useState<string | null>(null);
+  const [rangeEndId, setRangeEndId] = useState<string | null>(null);
+  const [clipboard, setClipboard] = useState<NoteOut[] | null>(null);
 
   const selectedNote = useMemo(() => notes.find((n) => n.id === selectedNoteId) ?? null, [notes, selectedNoteId]);
 
@@ -127,7 +170,14 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     setPendingFrets((current) => {
       const exists = current.some((f) => f.string_number === stringNumber);
       if (exists) return current.filter((f) => f.string_number !== stringNumber);
-      const newFret: NoteFretIn = { string_number: stringNumber, fret: 0, technique: "normal", slide_to_fret: null };
+      const newFret: NoteFretIn = {
+        string_number: stringNumber,
+        fret: 0,
+        technique: "normal",
+        slide_to_fret: null,
+        bend_semitones: null,
+        right_hand_finger: null,
+      };
       return [...current, newFret].sort((a, b) => a.string_number - b.string_number);
     });
   };
@@ -177,7 +227,14 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       ? selectedNote.frets.filter((f) => f.string_number !== stringNumber)
       : [
           ...selectedNote.frets,
-          { string_number: stringNumber, fret: 0, technique: "normal" as Technique, slide_to_fret: null },
+          {
+            string_number: stringNumber,
+            fret: 0,
+            technique: "normal" as Technique,
+            slide_to_fret: null,
+            bend_semitones: null,
+            right_hand_finger: null,
+          },
         ].sort((a, b) => a.string_number - b.string_number);
     updateSelectedNote({ frets: nextFrets });
   };
@@ -243,14 +300,88 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
             onChange={(e) => onMetadataChange({ ...metadata, tempoBpm: Number(e.target.value) })}
           />
         </label>
+        <label>
+          Capo (fret, 0 = none)
+          <input
+            type="number"
+            min={0}
+            max={12}
+            value={metadata.capoFret}
+            onChange={(e) => onMetadataChange({ ...metadata, capoFret: Number(e.target.value) })}
+          />
+        </label>
       </div>
 
       <h3>Tab preview</h3>
       <TabRenderer
         notes={notes}
         selectedNoteId={selectedNoteId}
-        onNoteClick={(note) => setSelectedNoteId(note.id)}
+        onNoteClick={(note) => {
+          setSelectedNoteId(note.id);
+        }}
       />
+
+      <div className="panel">
+        <h3>Copy / paste a range</h3>
+        <p className="muted-text">
+          Select a start and end note (e.g. the chorus), copy it, then paste it back in after selecting where
+          it should go -- handy for reusing a section and just changing the lyrics.
+        </p>
+        <div className="form-row">
+          <label>
+            Range start
+            <select value={rangeStartId ?? ""} onChange={(e) => setRangeStartId(e.target.value || null)}>
+              <option value="">(none)</option>
+              {notes.map((n, idx) => (
+                <option key={n.id} value={n.id}>
+                  Note {idx + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Range end
+            <select value={rangeEndId ?? ""} onChange={(e) => setRangeEndId(e.target.value || null)}>
+              <option value="">(none)</option>
+              {notes.map((n, idx) => (
+                <option key={n.id} value={n.id}>
+                  Note {idx + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!rangeStartId || !rangeEndId}
+            onClick={() => {
+              const startIdx = notes.findIndex((n) => n.id === rangeStartId);
+              const endIdx = notes.findIndex((n) => n.id === rangeEndId);
+              if (startIdx === -1 || endIdx === -1) return;
+              const [lo, hi] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+              setClipboard(notes.slice(lo, hi + 1));
+            }}
+          >
+            Copy range
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!clipboard}
+            onClick={() => {
+              if (!clipboard) return;
+              // Paste after the currently selected note (or at the end if none selected).
+              const insertAfterIdx = selectedNote ? notes.findIndex((n) => n.id === selectedNote.id) : notes.length - 1;
+              const pasted = clipboard.map((n) => ({ ...n, id: createNoteId() }));
+              const before = notes.slice(0, insertAfterIdx + 1);
+              const after = notes.slice(insertAfterIdx + 1);
+              onNotesChange([...before, ...pasted, ...after].map((n, idx) => ({ ...n, position: idx })));
+            }}
+          >
+            Paste after selected note{clipboard ? ` (${clipboard.length} notes)` : ""}
+          </button>
+        </div>
+      </div>
 
       {selectedNote && (
         <div className="panel">

@@ -13,7 +13,8 @@ import { TabsApi } from "../lib/api";
 import { ApiRequestError } from "../lib/apiClient";
 import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
-import type { TabDetail, TuningOut } from "../types/api";
+import { Metronome } from "../lib/metronome";
+import type { TabDetail, TabRevisionSummary, TuningOut } from "../types/api";
 
 export function TabViewPage() {
   const { tabId } = useParams();
@@ -31,6 +32,22 @@ export function TabViewPage() {
   const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [scrollSpeed, setScrollSpeed] = useState(4);
+
+  // Section loop/repeat: user picks a start/end note in the preview, then
+  // toggles loop mode so playback repeats just that region indefinitely.
+  const [loopStartId, setLoopStartId] = useState<string | null>(null);
+  const [loopEndId, setLoopEndId] = useState<string | null>(null);
+  const [loopEnabled, setLoopEnabled] = useState(false);
+
+  // Metronome: an independent click track with its own on/off toggle,
+  // reusing the same tempo control as playback.
+  const [metronomeOn, setMetronomeOn] = useState(false);
+  const metronomeRef = useRef<Metronome | null>(null);
+
+  // Revision history (owner-only): lets the tab's owner browse and restore
+  // prior saved versions.
+  const [revisions, setRevisions] = useState<TabRevisionSummary[]>([]);
+  const [showRevisions, setShowRevisions] = useState(false);
 
   const engineRef = useRef<TabPlaybackEngine | null>(null);
   const scrollIntervalRef = useRef<number | null>(null);
@@ -57,7 +74,11 @@ export function TabViewPage() {
       onProgress: (noteId) => setPlayingNoteId(noteId),
       onEnded: () => stopEverything(),
     });
-    return () => engineRef.current?.dispose();
+    metronomeRef.current = new Metronome();
+    return () => {
+      engineRef.current?.dispose();
+      metronomeRef.current?.dispose();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -72,7 +93,20 @@ export function TabViewPage() {
 
   const handlePlay = () => {
     if (!tab || !tuning) return;
-    engineRef.current?.play(tab.notes, tuning, tempoBpm, transposeSemitones);
+    const loop =
+      loopEnabled && loopStartId && loopEndId
+        ? (() => {
+            const startIdx = tab.notes.findIndex((n) => n.id === loopStartId);
+            const endIdx = tab.notes.findIndex((n) => n.id === loopEndId);
+            if (startIdx === -1 || endIdx === -1) return undefined;
+            const [lo, hi] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+            return { startPosition: tab.notes[lo].position, endPosition: tab.notes[hi].position };
+          })()
+        : undefined;
+    engineRef.current?.play(tab.notes, tuning, tempoBpm, transposeSemitones, {
+      capoFret: tab.capo_fret,
+      loop,
+    });
     setIsPlaying(true);
     if (autoScroll) {
       scrollIntervalRef.current = window.setInterval(() => {
@@ -86,6 +120,22 @@ export function TabViewPage() {
     stopEverything();
   };
 
+  const toggleMetronome = () => {
+    if (metronomeOn) {
+      metronomeRef.current?.stop();
+      setMetronomeOn(false);
+    } else {
+      metronomeRef.current?.start(tempoBpm);
+      setMetronomeOn(true);
+    }
+  };
+
+  // Keep a running metronome in sync if the tempo slider changes mid-click.
+  useEffect(() => {
+    if (metronomeOn) metronomeRef.current?.start(tempoBpm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tempoBpm]);
+
   const handleVote = async () => {
     if (!tab) return;
     try {
@@ -96,6 +146,28 @@ export function TabViewPage() {
     }
   };
 
+  const loadRevisions = async () => {
+    if (!tab) return;
+    try {
+      const list = await TabsApi.revisions(tab.id);
+      setRevisions(list);
+      setShowRevisions(true);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Failed to load revision history.");
+    }
+  };
+
+  const restoreRevision = async (revisionId: string) => {
+    if (!tab) return;
+    try {
+      const restored = await TabsApi.restoreRevision(tab.id, revisionId);
+      setTab(restored);
+      setShowRevisions(false);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Failed to restore revision.");
+    }
+  };
+
   if (loading) return <p>Loading...</p>;
   if (error) return <p className="error-banner">{error}</p>;
   if (!tab || !tuning) return <p>Tab not found.</p>;
@@ -103,20 +175,45 @@ export function TabViewPage() {
   const isOwner = user?.id === tab.owner_id;
 
   return (
-    <div className="panel">
+    <div className="panel tab-view-page">
       <h1>{tab.song_name}</h1>
       <p className="muted-text">
         {tab.artist && <>by {tab.artist} </>}
         {tab.album && <>· {tab.album} </>}
-        · Tuning: {tuning.display_name} · By{" "}
+        · Tuning: {tuning.display_name}
+        {tab.capo_fret > 0 && <> · Capo: fret {tab.capo_fret}</>} · By{" "}
         <Link to={`/users/${tab.owner_username}`}>{tab.owner_username}</Link>
         {tab.status === "draft" && <span className="tag">DRAFT</span>}
       </p>
 
-      <div className="toolbar">
+      <div className="toolbar no-print">
         <VoteButton voteCount={tab.vote_count} hasVoted={tab.has_voted} onVote={handleVote} />
         {isOwner && <button onClick={() => navigate(`/tabs/${tab.id}/edit`)}>Edit</button>}
+        {isOwner && <button className="secondary" onClick={loadRevisions}>History</button>}
+        <button className="secondary" onClick={() => window.print()}>
+          Print / PDF
+        </button>
       </div>
+
+      {showRevisions && (
+        <div className="panel no-print">
+          <h3>Revision history</h3>
+          {revisions.length === 0 && <p className="muted-text">No prior revisions saved yet.</p>}
+          <ul>
+            {revisions.map((rev) => (
+              <li key={rev.id}>
+                {new Date(rev.created_at).toLocaleString()}{" "}
+                <button className="secondary" onClick={() => restoreRevision(rev.id)}>
+                  Restore
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button className="secondary" onClick={() => setShowRevisions(false)}>
+            Close
+          </button>
+        </div>
+      )}
 
       <PlaybackControls
         tempoBpm={tempoBpm}
@@ -132,7 +229,46 @@ export function TabViewPage() {
         onScrollSpeedChange={setScrollSpeed}
       />
 
+      <div className="toolbar no-print">
+        <label>
+          <input type="checkbox" checked={metronomeOn} onChange={toggleMetronome} />
+          Metronome
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={loopEnabled}
+            onChange={(e) => setLoopEnabled(e.target.checked)}
+            disabled={!loopStartId || !loopEndId}
+          />
+          Loop section
+        </label>
+        <label>
+          Loop start
+          <select value={loopStartId ?? ""} onChange={(e) => setLoopStartId(e.target.value || null)}>
+            <option value="">(none)</option>
+            {tab.notes.map((n, idx) => (
+              <option key={n.id} value={n.id}>
+                Note {idx + 1}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Loop end
+          <select value={loopEndId ?? ""} onChange={(e) => setLoopEndId(e.target.value || null)}>
+            <option value="">(none)</option>
+            {tab.notes.map((n, idx) => (
+              <option key={n.id} value={n.id}>
+                Note {idx + 1}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <TabRenderer notes={tab.notes} playingNoteId={playingNoteId} />
     </div>
   );
 }
+

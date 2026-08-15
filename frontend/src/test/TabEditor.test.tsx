@@ -13,6 +13,7 @@ function Harness() {
     album: "",
     tuningKey: FALLBACK_TUNINGS[0].key,
     tempoBpm: 100,
+    capoFret: 0,
   });
   const [notes, setNotes] = useState<NoteOut[]>([]);
   return (
@@ -123,5 +124,78 @@ describe("TabEditor", () => {
     const fretCells = container.querySelectorAll(".tab-fret-cell");
     const fretTexts = Array.from(fretCells).map((el) => el.textContent);
     expect(fretTexts).toContain("2s5");
+  });
+
+  it("supports marking a note with a bend technique and bend amount, rendered as '<fret>b<semitones>'", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    const fretInput = screen.getByLabelText(/^fret$/i);
+    await user.clear(fretInput);
+    await user.type(fretInput, "3");
+    await user.selectOptions(screen.getByLabelText(/technique/i), "bend");
+
+    const bendInput = screen.getByLabelText(/bend up/i);
+    await user.clear(bendInput);
+    await user.type(bendInput, "2");
+    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
+
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
+    expect(fretTexts).toContain("3b2");
+  });
+
+  it("supports marking a note with drop-thumb technique and a roll-pattern finger annotation", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    const fretInput = screen.getByLabelText(/^fret$/i);
+    await user.clear(fretInput);
+    await user.type(fretInput, "5");
+    await user.selectOptions(screen.getByLabelText(/technique/i), "drop_thumb");
+    await user.selectOptions(screen.getByLabelText(/roll finger/i), "thumb");
+    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
+
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
+    // drop_thumb has no fret suffix, but the finger annotation "T" is appended.
+    expect(fretTexts).toContain("5T");
+    expect(container.querySelectorAll(".tab-fret-cell.drop-thumb")).toHaveLength(1);
+  });
+
+  it("allows setting a capo fret in the metadata form", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const capoInput = screen.getByLabelText(/capo/i);
+    await user.clear(capoInput);
+    await user.type(capoInput, "3");
+    expect(capoInput).toHaveValue(3);
+  });
+
+  it("supports copying a range of notes and pasting them elsewhere (e.g. to reuse a chorus)", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    // Add two notes: fret 1 then fret 2.
+    const fretInput = screen.getByLabelText(/^fret$/i);
+    await user.clear(fretInput);
+    await user.type(fretInput, "1");
+    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
+    await user.clear(fretInput);
+    await user.type(fretInput, "2");
+    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
+
+    // Copy the range "Note 1" through "Note 2".
+    await user.selectOptions(screen.getByLabelText(/range start/i), "Note 1");
+    await user.selectOptions(screen.getByLabelText(/range end/i), "Note 2");
+    await user.click(screen.getByRole("button", { name: /copy range/i }));
+    await user.click(screen.getByRole("button", { name: /paste after selected note/i }));
+
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells)
+      .map((el) => el.textContent)
+      .filter((t) => t !== "" && t !== "-");
+    // The 2-note range should now appear twice: [1, 2, 1, 2].
+    expect(fretTexts).toEqual(["1", "2", "1", "2"]);
   });
 });

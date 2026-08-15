@@ -27,18 +27,34 @@ const TECHNIQUE_SUFFIX: Record<NoteFretOut["technique"], string> = {
   hammer_on: "h",
   pull_off: "p",
   slide: "s",
+  bend: "b",
+  drop_thumb: "", // no visual change -- annotated via right_hand_finger only
 };
 
-/** Render a single fret's cell text, e.g. "2", "h2", "2p0", "2s4". */
+/** Abbreviation shown for an optional right-hand roll-pattern annotation. */
+const FINGER_ABBR: Record<NonNullable<NoteFretOut["right_hand_finger"]>, string> = {
+  thumb: "T",
+  index: "I",
+  middle: "M",
+};
+
+/** Render a single fret's cell text, e.g. "2", "h2", "2p0", "2s4", "2b2". */
 function fretCellText(fretEvent: NoteFretOut): string {
   const suffix = TECHNIQUE_SUFFIX[fretEvent.technique];
+  let text: string;
   if (fretEvent.technique === "slide" && fretEvent.slide_to_fret !== null) {
-    return `${fretEvent.fret}${suffix}${fretEvent.slide_to_fret}`;
+    text = `${fretEvent.fret}${suffix}${fretEvent.slide_to_fret}`;
+  } else if (fretEvent.technique === "bend" && fretEvent.bend_semitones !== null) {
+    text = `${fretEvent.fret}${suffix}${fretEvent.bend_semitones}`;
+  } else if (fretEvent.technique === "hammer_on" || fretEvent.technique === "pull_off") {
+    text = `${suffix}${fretEvent.fret}`;
+  } else {
+    text = `${fretEvent.fret}`;
   }
-  if (fretEvent.technique === "hammer_on" || fretEvent.technique === "pull_off") {
-    return `${suffix}${fretEvent.fret}`;
+  if (fretEvent.right_hand_finger) {
+    text += FINGER_ABBR[fretEvent.right_hand_finger];
   }
-  return `${fretEvent.fret}`;
+  return text;
 }
 
 interface TabRendererProps {
@@ -78,6 +94,7 @@ export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick 
                         isSelected ? "selected" : "",
                         onNoteClick ? "clickable" : "",
                         fretOnThisString && isChord ? "chord-member" : "",
+                        fretOnThisString?.technique === "drop_thumb" ? "drop-thumb" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}

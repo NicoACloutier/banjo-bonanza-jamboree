@@ -25,6 +25,19 @@ export class TabPlaybackEngine {
   private durationSeconds = 0;
   private callbacks: PlaybackCallbacks;
   private playing = false;
+  /**
+   * When set, playback restarts the same (looped) region on completion
+   * instead of stopping -- used by the section loop/repeat feature.
+   */
+  private loopOptions: {
+    notes: NoteOut[];
+    tuning: TuningOut;
+    tempoBpm: number;
+    transposeSemitones: number;
+    capoFret: number;
+    startPosition: number;
+    endPosition: number;
+  } | null = null;
 
   constructor(callbacks: PlaybackCallbacks = {}) {
     this.callbacks = callbacks;
@@ -47,32 +60,44 @@ export class TabPlaybackEngine {
     tuning: TuningOut,
     tempoBpm: number,
     transposeSemitones: number,
+    options: { capoFret?: number; loop?: { startPosition: number; endPosition: number } } = {},
   ): void {
     this.stop();
     const ctx = this.ensureContext();
-    this.schedule = computePlaybackSchedule(notes, tuning, tempoBpm, transposeSemitones);
-    this.durationSeconds = totalDurationSeconds(notes, tempoBpm);
+    const capoFret = options.capoFret ?? 0;
+    let scheduleNotes = notes;
+    if (options.loop) {
+      const { startPosition, endPosition } = options.loop;
+      scheduleNotes = notes.filter((n) => n.position >= startPosition && n.position <= endPosition);
+    }
+    this.schedule = computePlaybackSchedule(scheduleNotes, tuning, tempoBpm, transposeSemitones, capoFret);
+    this.durationSeconds = totalDurationSeconds(scheduleNotes, tempoBpm);
+    this.loopOptions = options.loop
+      ? { notes, tuning, tempoBpm, transposeSemitones, capoFret, ...options.loop }
+      : null;
     this.startedAtContextTime = ctx.currentTime + 0.05;
     this.playing = true;
 
     for (const note of this.schedule) {
       const noteDurationSeconds = Math.max(0.05, note.duration_beats * (60 / tempoBpm));
       for (const sound of note.sounds) {
-        const rawSamples =
-          sound.technique === "slide" && sound.slideToFrequency !== undefined
-            ? synthesizeSlide({
-                startFrequency: sound.frequency,
-                endFrequency: sound.slideToFrequency,
-                sampleRate: ctx.sampleRate,
-                durationSeconds: noteDurationSeconds,
-                damping: 0.4,
-              })
-            : synthesizePluck({
-                frequency: sound.frequency,
-                sampleRate: ctx.sampleRate,
-                durationSeconds: noteDurationSeconds,
-                damping: 0.4,
-              });
+        const isGlide =
+          (sound.technique === "slide" && sound.slideToFrequency !== undefined) ||
+          (sound.technique === "bend" && sound.bendToFrequency !== undefined);
+        const rawSamples = isGlide
+          ? synthesizeSlide({
+              startFrequency: sound.frequency,
+              endFrequency: (sound.slideToFrequency ?? sound.bendToFrequency)!,
+              sampleRate: ctx.sampleRate,
+              durationSeconds: noteDurationSeconds,
+              damping: 0.4,
+            })
+          : synthesizePluck({
+              frequency: sound.frequency,
+              sampleRate: ctx.sampleRate,
+              durationSeconds: noteDurationSeconds,
+              damping: 0.4,
+            });
         const samples = applyFadeEnvelope(rawSamples);
         const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
         buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0);
@@ -94,7 +119,16 @@ export class TabPlaybackEngine {
 
     const totalMs = this.durationSeconds * 1000 + 200;
     window.setTimeout(() => {
-      if (this.playing) {
+      if (!this.playing) return;
+      if (this.loopOptions) {
+        // Restart the same looped region seamlessly rather than stopping.
+        const { notes: loopNotes, tuning: loopTuning, tempoBpm: loopTempo, transposeSemitones: loopTranspose, capoFret: loopCapo, startPosition, endPosition } =
+          this.loopOptions;
+        this.play(loopNotes, loopTuning, loopTempo, loopTranspose, {
+          capoFret: loopCapo,
+          loop: { startPosition, endPosition },
+        });
+      } else {
         this.playing = false;
         this.callbacks.onEnded?.();
       }

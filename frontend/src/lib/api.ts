@@ -7,6 +7,8 @@ import type {
   TabCreateRequest,
   TabDetail,
   TabListResponse,
+  TabRevisionDetail,
+  TabRevisionSummary,
   TabUpdateRequest,
   TokenResponse,
   TuningOut,
@@ -43,6 +45,11 @@ export const TabsApi = {
   search: (q: string | undefined, page: number, pageSize: number) =>
     apiRequest<TabListResponse>("/api/tabs", { query: { q, page, page_size: pageSize }, auth: false }),
   vote: (id: string) => apiRequest<VoteResponse>(`/api/tabs/${id}/vote`, { method: "POST" }),
+  revisions: (id: string) => apiRequest<TabRevisionSummary[]>(`/api/tabs/${id}/revisions`),
+  revision: (id: string, revisionId: string) =>
+    apiRequest<TabRevisionDetail>(`/api/tabs/${id}/revisions/${revisionId}`),
+  restoreRevision: (id: string, revisionId: string) =>
+    apiRequest<TabDetail>(`/api/tabs/${id}/revisions/${revisionId}/restore`, { method: "POST" }),
 };
 
 export const UsersApi = {

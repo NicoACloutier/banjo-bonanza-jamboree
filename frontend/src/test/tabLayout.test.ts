@@ -4,7 +4,15 @@ import { getFallbackTuning } from "../lib/tunings";
 import type { NoteFretIn, NoteOut } from "../types/api";
 
 function makeFret(overrides: Partial<NoteFretIn> = {}): NoteFretIn {
-  return { string_number: 1, fret: 0, technique: "normal", slide_to_fret: null, ...overrides };
+  return {
+    string_number: 1,
+    fret: 0,
+    technique: "normal",
+    slide_to_fret: null,
+    bend_semitones: null,
+    right_hand_finger: null,
+    ...overrides,
+  };
 }
 
 function makeNote(overrides: Partial<NoteOut>): NoteOut {
@@ -142,5 +150,58 @@ describe("tabLayout", () => {
     const notes = [makeNote({ frets: [makeFret({ technique: "hammer_on" })] })];
     const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
     expect(schedule[0].sounds[0].slideToFrequency).toBeUndefined();
+  });
+
+  it("raises every sounding pitch by the capo fret count, independent of transpose", () => {
+    const notes = [makeNote({ frets: [makeFret({ string_number: 1, fret: 0 })] })];
+    const noCapo = computePlaybackSchedule(notes, tuning, 60, 0, 0)[0].sounds[0].frequency;
+    const capo2 = computePlaybackSchedule(notes, tuning, 60, 0, 2)[0].sounds[0].frequency;
+    expect(capo2).toBeCloseTo(noCapo * Math.pow(2, 2 / 12), 3);
+  });
+
+  it("composes capo and transpose independently (both raise pitch additively)", () => {
+    const notes = [makeNote({ frets: [makeFret({ string_number: 1, fret: 0 })] })];
+    const base = computePlaybackSchedule(notes, tuning, 60, 0, 0)[0].sounds[0].frequency;
+    const both = computePlaybackSchedule(notes, tuning, 60, 3, 2)[0].sounds[0].frequency;
+    expect(both).toBeCloseTo(base * Math.pow(2, 5 / 12), 3);
+  });
+
+  it("also raises a slide's target frequency by the capo fret count", () => {
+    const notes = [
+      makeNote({
+        frets: [makeFret({ string_number: 1, fret: 2, technique: "slide", slide_to_fret: 4 })],
+      }),
+    ];
+    const noCapo = computePlaybackSchedule(notes, tuning, 60, 0, 0)[0].sounds[0];
+    const withCapo = computePlaybackSchedule(notes, tuning, 60, 0, 3)[0].sounds[0];
+    expect(withCapo.frequency).toBeCloseTo(noCapo.frequency * Math.pow(2, 3 / 12), 3);
+    expect(withCapo.slideToFrequency!).toBeCloseTo(noCapo.slideToFrequency! * Math.pow(2, 3 / 12), 3);
+  });
+
+  it("computes a bendToFrequency for bend technique frets, rising by bend_semitones", () => {
+    const notes = [
+      makeNote({
+        frets: [makeFret({ string_number: 1, fret: 2, technique: "bend", bend_semitones: 2 })],
+      }),
+    ];
+    const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+    const sound = schedule[0].sounds[0];
+    expect(sound.technique).toBe("bend");
+    expect(sound.bendToFrequency).toBeDefined();
+    expect(sound.bendToFrequency!).toBeCloseTo(sound.frequency * Math.pow(2, 2 / 12), 3);
+  });
+
+  it("does not set bendToFrequency for a bend fret missing bend_semitones", () => {
+    const notes = [
+      makeNote({ frets: [makeFret({ string_number: 1, fret: 2, technique: "bend", bend_semitones: null })] }),
+    ];
+    const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+    expect(schedule[0].sounds[0].bendToFrequency).toBeUndefined();
+  });
+
+  it("does not set bendToFrequency for non-bend techniques", () => {
+    const notes = [makeNote({ frets: [makeFret({ technique: "drop_thumb" })] })];
+    const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+    expect(schedule[0].sounds[0].bendToFrequency).toBeUndefined();
   });
 });

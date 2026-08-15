@@ -19,7 +19,10 @@ export interface TokenResponse {
   token_type: string;
 }
 
-export type Technique = "normal" | "hammer_on" | "pull_off" | "slide";
+export type Technique = "normal" | "hammer_on" | "pull_off" | "slide" | "bend" | "drop_thumb";
+
+/** Which right-hand digit plucks this string, for clawhammer roll-pattern annotation. */
+export type RightHandFinger = "thumb" | "index" | "middle";
 
 /** One string/fret (with optional technique) sounded within a note slot. */
 export interface NoteFretIn {
@@ -28,6 +31,10 @@ export interface NoteFretIn {
   technique: Technique;
   /** Only meaningful when technique === "slide": the fret slid *into*. */
   slide_to_fret: number | null;
+  /** Only meaningful when technique === "bend": semitones the pitch rises to. */
+  bend_semitones: number | null;
+  /** Optional roll-pattern annotation; does not affect playback sound. */
+  right_hand_finger: RightHandFinger | null;
 }
 
 export interface NoteFretOut {
@@ -35,6 +42,8 @@ export interface NoteFretOut {
   fret: number;
   technique: Technique;
   slide_to_fret: number | null;
+  bend_semitones: number | null;
+  right_hand_finger: RightHandFinger | null;
 }
 
 export interface NoteIn {
@@ -63,6 +72,8 @@ export interface TabCreateRequest {
   artist?: string | null;
   album?: string | null;
   tempo_bpm: number;
+  /** Capo position in frets (0 = no capo). */
+  capo_fret: number;
   notes: NoteIn[];
   publish: boolean;
 }
@@ -89,6 +100,7 @@ export interface TabDetail {
   album: string | null;
   tuning_key: string;
   tempo_bpm: number;
+  capo_fret: number;
   status: TabStatus;
   vote_count: number;
   owner_id: string;
@@ -121,4 +133,26 @@ export interface TuningOut {
 
 export interface ApiError {
   detail: string;
+}
+
+/** One entry in a tab's revision history list (see `TabRevisionSummary` on the backend). */
+export interface TabRevisionSummary {
+  id: string;
+  created_at: string;
+  song_name: string;
+  note_count: number;
+}
+
+/** Full snapshot of a past revision, restorable via the restore endpoint. */
+export interface TabRevisionDetail {
+  id: string;
+  tab_id: string;
+  created_at: string;
+  song_name: string;
+  artist: string | null;
+  album: string | null;
+  tuning_key: string;
+  tempo_bpm: number;
+  capo_fret: number;
+  notes: NoteOut[];
 }
