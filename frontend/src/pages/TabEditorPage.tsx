@@ -15,12 +15,16 @@ import type { NoteIn, NoteOut, TuningOut } from "../types/api";
 function notesToNoteIn(notes: NoteOut[]): NoteIn[] {
   return notes.map((n, idx) => ({
     position: idx,
-    string_number: n.string_number,
-    fret: n.fret,
     duration_beats: n.duration_beats,
     line_break: n.line_break,
     lyric: n.lyric,
     is_rest: n.is_rest,
+    frets: n.frets.map((f) => ({
+      string_number: f.string_number,
+      fret: f.fret,
+      technique: f.technique,
+      slide_to_fret: f.slide_to_fret,
+    })),
   }));
 }
 

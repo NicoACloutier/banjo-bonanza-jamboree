@@ -97,7 +97,10 @@ class Tab(Base):
 
 class Note(Base):
     """
-    A single fretted (or open/muted) note in a tab, in playback order.
+    A single playback "slot" (one moment in time) in a tab, in playback
+    order. A slot may contain zero frets (a rest), one fret (a normal single
+    note), or several frets played simultaneously (a chord) -- see
+    `NoteFret` below.
 
     `position` is a strictly increasing integer defining play order.
     `line_break` marks that a new tab line/system should start *after* this
@@ -109,17 +112,56 @@ class Note(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
     tab_id: Mapped[str] = mapped_column(ForeignKey("tabs.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-    string_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5 (ignored for rests)
-    fret: Mapped[int] = mapped_column(Integer, nullable=False)  # 0 = open string (ignored for rests)
     # Duration expressed in quarter-note beats (0.25 = 16th, 0.5 = 8th, 1 = quarter, etc.)
     duration_beats: Mapped[float] = mapped_column(default=1.0)
     line_break: Mapped[bool] = mapped_column(Boolean, default=False)
     # A rest: takes up time (advances playback) but produces no sound and no
-    # fret number in the rendered tab -- just extra space before the next note.
+    # fret numbers in the rendered tab -- just extra space before the next
+    # note. A rest has no NoteFret rows.
     is_rest: Mapped[bool] = mapped_column(Boolean, default=False)
 
     tab: Mapped[Tab] = relationship(back_populates="notes")
     lyric: Mapped["Lyric | None"] = relationship(back_populates="note", uselist=False)
+    frets: Mapped[list["NoteFret"]] = relationship(
+        back_populates="note", cascade="all, delete-orphan", order_by="NoteFret.string_number"
+    )
+
+
+class NoteTechnique(str, enum.Enum):
+    """How a fretted note is sounded, relative to the previous note on the same string."""
+
+    normal = "normal"
+    hammer_on = "hammer_on"
+    pull_off = "pull_off"
+    slide = "slide"
+
+
+class NoteFret(Base):
+    """
+    One fretted (or open) string within a `Note` slot. A slot with more than
+    one `NoteFret` row is a chord (several strings struck simultaneously).
+
+    `technique` marks how this fret is sounded: a plain pick/pluck
+    ("normal"), a hammer-on or pull-off from the previous note on the same
+    string (played legato, with a softer/quicker attack and no separate
+    pick-pluck sound), or a slide into `slide_to_fret` (a continuous pitch
+    glide from `fret` to `slide_to_fret` over the note's duration).
+    """
+
+    __tablename__ = "note_frets"
+    __table_args__ = (UniqueConstraint("note_id", "string_number", name="uq_note_fret_string"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
+    note_id: Mapped[str] = mapped_column(ForeignKey("notes.id", ondelete="CASCADE"), index=True)
+    string_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5
+    fret: Mapped[int] = mapped_column(Integer, nullable=False)  # 0 = open string
+    technique: Mapped[NoteTechnique] = mapped_column(
+        Enum(NoteTechnique, native_enum=False), default=NoteTechnique.normal
+    )
+    # Only meaningful when technique == slide: the fret slid *into*.
+    slide_to_fret: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    note: Mapped[Note] = relationship(back_populates="frets")
 
 
 class Lyric(Base):

@@ -19,25 +19,42 @@ export interface TokenResponse {
   token_type: string;
 }
 
-export interface NoteIn {
-  position: number;
+export type Technique = "normal" | "hammer_on" | "pull_off" | "slide";
+
+/** One string/fret (with optional technique) sounded within a note slot. */
+export interface NoteFretIn {
   string_number: number;
   fret: number;
+  technique: Technique;
+  /** Only meaningful when technique === "slide": the fret slid *into*. */
+  slide_to_fret: number | null;
+}
+
+export interface NoteFretOut {
+  string_number: number;
+  fret: number;
+  technique: Technique;
+  slide_to_fret: number | null;
+}
+
+export interface NoteIn {
+  position: number;
   duration_beats: number;
   line_break: boolean;
   lyric?: string | null;
   is_rest: boolean;
+  /** One entry per string sounded; more than one entry means a chord. Empty for a rest. */
+  frets: NoteFretIn[];
 }
 
 export interface NoteOut {
   id: string;
   position: number;
-  string_number: number;
-  fret: number;
   duration_beats: number;
   line_break: boolean;
   lyric: string | null;
   is_rest: boolean;
+  frets: NoteFretOut[];
 }
 
 export interface TabCreateRequest {

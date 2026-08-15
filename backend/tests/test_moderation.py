@@ -40,7 +40,13 @@ async def test_publish_with_offensive_lyric_rejected(client):
         json={
             "song_name": "Test Song",
             "tuning_key": "standard_g",
-            "notes": [{"position": 0, "string_number": 1, "fret": 0, "lyric": "you filthy retard"}],
+            "notes": [
+                {
+                    "position": 0,
+                    "frets": [{"string_number": 1, "fret": 0}],
+                    "lyric": "you filthy retard",
+                }
+            ],
             "publish": True,
         },
     )

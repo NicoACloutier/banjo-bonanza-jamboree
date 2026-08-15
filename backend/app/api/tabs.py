@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.core.deps import ANONYMOUS_USERNAME, get_current_user, get_optional_user
 from app.core.msgspec_utils import MsgspecResponse, parse_json_body
 from app.core.tunings import TUNINGS, get_tuning
-from app.models.orm import Lyric, Note, Tab, TabStatus, User, Vote
+from app.models.orm import Lyric, Note, NoteFret, NoteTechnique, Tab, TabStatus, User, Vote
 from app.schemas.schemas import (
     TabCreateRequest,
     TabDetail,
@@ -26,7 +26,7 @@ from app.services.moderation import find_offending_fields
 
 router = APIRouter(prefix="/api/tabs", tags=["tabs"])
 
-_TAB_LOAD_OPTIONS = (selectinload(Tab.owner), selectinload(Tab.notes).selectinload(Note.lyric))
+_TAB_LOAD_OPTIONS = (selectinload(Tab.owner), selectinload(Tab.notes).selectinload(Note.lyric), selectinload(Tab.notes).selectinload(Note.frets))
 
 
 async def _get_or_create_anonymous_user(db: AsyncSession) -> User:
@@ -61,51 +61,106 @@ def _validate_tuning(tuning_key: str) -> None:
 def _validate_notes(notes_in) -> None:
     """
     Validate note fields server-side so malformed data (e.g. an out-of-range
-    string number) can never be persisted and later crash frontend playback
-    scheduling, which indexes `tuning.open_strings[string_number - 1]` with
-    no bounds check of its own.
+    string number, duplicate strings in a chord, or a nonsensical slide) can
+    never be persisted and later crash frontend playback scheduling/
+    rendering.
     """
     for i, note in enumerate(notes_in):
-        if not (1 <= note.string_number <= 5):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Note {i}: string_number must be between 1 and 5.",
-            )
-        if note.fret < 0 or note.fret > 24:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Note {i}: fret must be between 0 and 24.",
-            )
         if note.duration_beats <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Note {i}: duration_beats must be positive.",
             )
+        if note.is_rest:
+            if note.frets:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Note {i}: a rest cannot have any frets.",
+                )
+            continue
+        if not note.frets:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Note {i}: must have at least one fret (or be marked as a rest).",
+            )
+        if len(note.frets) > 5:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Note {i}: a banjo only has 5 strings.",
+            )
+        seen_strings: set[int] = set()
+        for fret_in in note.frets:
+            if not (1 <= fret_in.string_number <= 5):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Note {i}: string_number must be between 1 and 5.",
+                )
+            if fret_in.string_number in seen_strings:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Note {i}: string {fret_in.string_number} is used more than once (a string can only sound once per chord).",
+                )
+            seen_strings.add(fret_in.string_number)
+            if fret_in.fret < 0 or fret_in.fret > 24:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Note {i}: fret must be between 0 and 24.",
+                )
+            if fret_in.technique.value == "slide":
+                if fret_in.slide_to_fret is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Note {i}: a slide must specify slide_to_fret.",
+                    )
+                if fret_in.slide_to_fret < 0 or fret_in.slide_to_fret > 24:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Note {i}: slide_to_fret must be between 0 and 24.",
+                    )
+                if fret_in.slide_to_fret == fret_in.fret:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Note {i}: a slide must move to a different fret.",
+                    )
+            elif fret_in.slide_to_fret is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Note {i}: slide_to_fret is only valid when technique is 'slide'.",
+                )
 
 
 async def _replace_notes(db: AsyncSession, tab: Tab, notes_in) -> None:
     """
-    Replace all notes (and their lyrics) belonging to `tab`.
+    Replace all notes (and their frets/lyrics) belonging to `tab`.
 
     We delete existing rows with an explicit DELETE statement and insert new
     ones directly, rather than mutating the `tab.notes` ORM relationship
     collection -- this avoids triggering an implicit lazy-load of that
     collection, which is disallowed on an AsyncSession outside of an
-    explicit `await`/eager-load.
+    explicit `await`/eager-load. `note_frets` rows cascade-delete with their
+    parent `notes` row at the database level (ondelete="CASCADE").
     """
     await db.execute(Note.__table__.delete().where(Note.tab_id == tab.id))
     for note_in in notes_in:
         note = Note(
             tab_id=tab.id,
             position=note_in.position,
-            string_number=note_in.string_number,
-            fret=note_in.fret,
             duration_beats=note_in.duration_beats,
             line_break=note_in.line_break,
             is_rest=note_in.is_rest,
         )
         db.add(note)
         await db.flush()
+        for fret_in in note_in.frets:
+            db.add(
+                NoteFret(
+                    note_id=note.id,
+                    string_number=fret_in.string_number,
+                    fret=fret_in.fret,
+                    technique=NoteTechnique(fret_in.technique.value),
+                    slide_to_fret=fret_in.slide_to_fret,
+                )
+            )
         if note_in.lyric:
             db.add(Lyric(tab_id=tab.id, note_id=note.id, text=note_in.lyric))
 

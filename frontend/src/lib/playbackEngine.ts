@@ -7,7 +7,7 @@
  * (e.g. the auto-scroll feature) can use to know which note is currently
  * sounding.
  */
-import { applyFadeEnvelope, synthesizePluck } from "./pluckSynth";
+import { applyFadeEnvelope, synthesizePluck, synthesizeSlide } from "./pluckSynth";
 import { computePlaybackSchedule, totalDurationSeconds, type TimedNote } from "./tabLayout";
 import type { NoteOut, TuningOut } from "../types/api";
 
@@ -57,23 +57,37 @@ export class TabPlaybackEngine {
 
     for (const note of this.schedule) {
       const noteDurationSeconds = Math.max(0.05, note.duration_beats * (60 / tempoBpm));
-      const rawSamples = synthesizePluck({
-        frequency: note.frequency,
-        sampleRate: ctx.sampleRate,
-        durationSeconds: noteDurationSeconds,
-        damping: 0.4,
-      });
-      const samples = applyFadeEnvelope(rawSamples);
-      const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
-      buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0);
+      for (const sound of note.sounds) {
+        const rawSamples =
+          sound.technique === "slide" && sound.slideToFrequency !== undefined
+            ? synthesizeSlide({
+                startFrequency: sound.frequency,
+                endFrequency: sound.slideToFrequency,
+                sampleRate: ctx.sampleRate,
+                durationSeconds: noteDurationSeconds,
+                damping: 0.4,
+              })
+            : synthesizePluck({
+                frequency: sound.frequency,
+                sampleRate: ctx.sampleRate,
+                durationSeconds: noteDurationSeconds,
+                damping: 0.4,
+              });
+        const samples = applyFadeEnvelope(rawSamples);
+        const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+        buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0);
 
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      const gain = ctx.createGain();
-      gain.gain.value = 0.6;
-      source.connect(gain).connect(ctx.destination);
-      source.start(this.startedAtContextTime + note.startTimeSeconds);
-      this.sources.push(source);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        const gain = ctx.createGain();
+        // Hammer-ons and pull-offs are played legato (fretting-hand only,
+        // no pick attack), so they should sound noticeably softer than a
+        // picked note; a plain note or slide keeps full pick volume.
+        gain.gain.value = sound.technique === "hammer_on" || sound.technique === "pull_off" ? 0.35 : 0.6;
+        source.connect(gain).connect(ctx.destination);
+        source.start(this.startedAtContextTime + note.startTimeSeconds);
+        this.sources.push(source);
+      }
     }
 
     this.tick();

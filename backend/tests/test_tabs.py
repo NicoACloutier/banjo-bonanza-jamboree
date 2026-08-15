@@ -14,9 +14,19 @@ async def _register_and_login(client, username="tabuser", password="banjo1234"):
 
 def _sample_notes():
     return [
-        {"position": 0, "string_number": 1, "fret": 0, "duration_beats": 1.0, "lyric": "Hello"},
-        {"position": 1, "string_number": 2, "fret": 2, "duration_beats": 1.0},
-        {"position": 2, "string_number": 3, "fret": 3, "duration_beats": 1.0, "line_break": True},
+        {
+            "position": 0,
+            "duration_beats": 1.0,
+            "lyric": "Hello",
+            "frets": [{"string_number": 1, "fret": 0}],
+        },
+        {"position": 1, "duration_beats": 1.0, "frets": [{"string_number": 2, "fret": 2}]},
+        {
+            "position": 2,
+            "duration_beats": 1.0,
+            "line_break": True,
+            "frets": [{"string_number": 3, "fret": 3}],
+        },
     ]
 
 
@@ -27,9 +37,9 @@ async def test_rest_note_round_trips_and_advances_no_sound(client):
             "song_name": "Rest Test",
             "tuning_key": "standard_g",
             "notes": [
-                {"position": 0, "string_number": 1, "fret": 0, "duration_beats": 1.0},
-                {"position": 1, "string_number": 1, "fret": 0, "duration_beats": 2.0, "is_rest": True},
-                {"position": 2, "string_number": 2, "fret": 3, "duration_beats": 1.0},
+                {"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 0}]},
+                {"position": 1, "duration_beats": 2.0, "is_rest": True, "frets": []},
+                {"position": 2, "duration_beats": 1.0, "frets": [{"string_number": 2, "fret": 3}]},
             ],
             "publish": True,
         },
@@ -49,6 +59,197 @@ async def test_rest_note_round_trips_and_advances_no_sound(client):
     ]
 
 
+async def test_chord_note_round_trips_with_multiple_strings(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Chord Test",
+            "tuning_key": "standard_g",
+            "notes": [
+                {
+                    "position": 0,
+                    "duration_beats": 2.0,
+                    "frets": [
+                        {"string_number": 1, "fret": 0},
+                        {"string_number": 2, "fret": 1},
+                        {"string_number": 3, "fret": 0},
+                    ],
+                }
+            ],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    frets = sorted(body["notes"][0]["frets"], key=lambda f: f["string_number"])
+    assert [f["string_number"] for f in frets] == [1, 2, 3]
+    assert [f["fret"] for f in frets] == [0, 1, 0]
+
+    fetched = await client.get(f"/api/tabs/{body['id']}")
+    fetched_frets = sorted(fetched.json()["notes"][0]["frets"], key=lambda f: f["string_number"])
+    assert len(fetched_frets) == 3
+
+
+async def test_hammer_on_pull_off_slide_round_trip(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Technique Test",
+            "tuning_key": "standard_g",
+            "notes": [
+                {
+                    "position": 0,
+                    "duration_beats": 1.0,
+                    "frets": [{"string_number": 1, "fret": 0, "technique": "normal"}],
+                },
+                {
+                    "position": 1,
+                    "duration_beats": 1.0,
+                    "frets": [{"string_number": 1, "fret": 2, "technique": "hammer_on"}],
+                },
+                {
+                    "position": 2,
+                    "duration_beats": 1.0,
+                    "frets": [{"string_number": 1, "fret": 0, "technique": "pull_off"}],
+                },
+                {
+                    "position": 3,
+                    "duration_beats": 1.0,
+                    "frets": [
+                        {
+                            "string_number": 1,
+                            "fret": 2,
+                            "technique": "slide",
+                            "slide_to_fret": 4,
+                        }
+                    ],
+                },
+            ],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    notes = sorted(body["notes"], key=lambda n: n["position"])
+    techniques = [n["frets"][0]["technique"] for n in notes]
+    assert techniques == ["normal", "hammer_on", "pull_off", "slide"]
+    assert notes[3]["frets"][0]["slide_to_fret"] == 4
+
+
+async def test_slide_requires_slide_to_fret(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Bad Slide",
+            "tuning_key": "standard_g",
+            "notes": [
+                {
+                    "position": 0,
+                    "duration_beats": 1.0,
+                    "frets": [{"string_number": 1, "fret": 2, "technique": "slide"}],
+                }
+            ],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
+async def test_slide_to_same_fret_rejected(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Pointless Slide",
+            "tuning_key": "standard_g",
+            "notes": [
+                {
+                    "position": 0,
+                    "duration_beats": 1.0,
+                    "frets": [
+                        {"string_number": 1, "fret": 2, "technique": "slide", "slide_to_fret": 2}
+                    ],
+                }
+            ],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
+async def test_slide_to_fret_rejected_when_not_sliding(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Stray Slide Target",
+            "tuning_key": "standard_g",
+            "notes": [
+                {
+                    "position": 0,
+                    "duration_beats": 1.0,
+                    "frets": [{"string_number": 1, "fret": 2, "slide_to_fret": 4}],
+                }
+            ],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
+async def test_duplicate_string_in_chord_rejected(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Duplicate String Chord",
+            "tuning_key": "standard_g",
+            "notes": [
+                {
+                    "position": 0,
+                    "duration_beats": 1.0,
+                    "frets": [
+                        {"string_number": 1, "fret": 0},
+                        {"string_number": 1, "fret": 2},
+                    ],
+                }
+            ],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
+async def test_rest_with_frets_rejected(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Bad Rest",
+            "tuning_key": "standard_g",
+            "notes": [
+                {
+                    "position": 0,
+                    "duration_beats": 1.0,
+                    "is_rest": True,
+                    "frets": [{"string_number": 1, "fret": 0}],
+                }
+            ],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
+async def test_non_rest_note_requires_at_least_one_fret(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Empty Note",
+            "tuning_key": "standard_g",
+            "notes": [{"position": 0, "duration_beats": 1.0, "frets": []}],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
 async def test_create_tab_rejects_out_of_range_string_number(client):
     # Regression test: string_number outside 1..5 used to be accepted by
     # the API with no validation, which would later crash frontend
@@ -58,7 +259,7 @@ async def test_create_tab_rejects_out_of_range_string_number(client):
         json={
             "song_name": "Bad String",
             "tuning_key": "standard_g",
-            "notes": [{"position": 0, "string_number": 6, "fret": 0, "duration_beats": 1.0}],
+            "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 6, "fret": 0}]}],
             "publish": True,
         },
     )
@@ -69,7 +270,7 @@ async def test_create_tab_rejects_out_of_range_string_number(client):
         json={
             "song_name": "Bad String Zero",
             "tuning_key": "standard_g",
-            "notes": [{"position": 0, "string_number": 0, "fret": 0, "duration_beats": 1.0}],
+            "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 0, "fret": 0}]}],
             "publish": True,
         },
     )
@@ -82,7 +283,7 @@ async def test_create_tab_rejects_negative_fret(client):
         json={
             "song_name": "Bad Fret",
             "tuning_key": "standard_g",
-            "notes": [{"position": 0, "string_number": 1, "fret": -1, "duration_beats": 1.0}],
+            "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": -1}]}],
             "publish": True,
         },
     )
@@ -95,7 +296,7 @@ async def test_create_tab_rejects_non_positive_duration(client):
         json={
             "song_name": "Bad Duration",
             "tuning_key": "standard_g",
-            "notes": [{"position": 0, "string_number": 1, "fret": 0, "duration_beats": 0}],
+            "notes": [{"position": 0, "duration_beats": 0, "frets": [{"string_number": 1, "fret": 0}]}],
             "publish": True,
         },
     )

@@ -2,24 +2,32 @@
 
 from __future__ import annotations
 
-from app.models.orm import Note, Tab, User
-from app.schemas.schemas import NoteOut, TabDetail, TabSummary, TabStatusOut, UserPublic
+from app.models.orm import Note, NoteFret, Tab, User
+from app.schemas.schemas import NoteFretOut, NoteOut, TabDetail, TabSummary, TabStatusOut, TechniqueOut, UserPublic
 
 
 def user_to_public(user: User) -> UserPublic:
     return UserPublic(id=user.id, username=user.username, created_at=user.created_at)
 
 
+def note_fret_to_out(fret: NoteFret) -> NoteFretOut:
+    return NoteFretOut(
+        string_number=fret.string_number,
+        fret=fret.fret,
+        technique=TechniqueOut(fret.technique.value),
+        slide_to_fret=fret.slide_to_fret,
+    )
+
+
 def note_to_out(note: Note) -> NoteOut:
     return NoteOut(
         id=note.id,
         position=note.position,
-        string_number=note.string_number,
-        fret=note.fret,
         duration_beats=note.duration_beats,
         line_break=note.line_break,
         lyric=note.lyric.text if note.lyric else None,
         is_rest=note.is_rest,
+        frets=[note_fret_to_out(f) for f in sorted(note.frets, key=lambda f: f.string_number)],
     )
 
 

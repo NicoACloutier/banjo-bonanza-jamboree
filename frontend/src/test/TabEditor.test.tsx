@@ -31,8 +31,10 @@ describe("TabEditor", () => {
     const user = userEvent.setup();
     const { container } = render(<Harness />);
 
+    // String 1 is selected by default; toggle to string 3 instead.
+    await user.click(screen.getByRole("button", { name: "Str 1" }));
     await user.click(screen.getByRole("button", { name: "Str 3" }));
-    const fretInput = screen.getByLabelText(/fret number/i);
+    const fretInput = screen.getByLabelText(/^fret$/i);
     await user.clear(fretInput);
     await user.type(fretInput, "4");
     await user.click(screen.getByRole("button", { name: /\+ add note/i }));
@@ -72,5 +74,54 @@ describe("TabEditor", () => {
     // A rest never shows a digit, so none of the string rows should show "0".
     expect(fretTexts).not.toContain("0");
     expect(fretTexts.every((t) => t === "")).toBe(true);
+  });
+
+  it("supports selecting multiple strings to create a chord", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    // String 1 is selected by default; add strings 2 and 3 for a 3-note chord.
+    await user.click(screen.getByRole("button", { name: "Str 2" }));
+    await user.click(screen.getByRole("button", { name: "Str 3" }));
+    expect(screen.getByText(/3 strings selected/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /\+ add note \(chord\)/i }));
+
+    const chordCells = container.querySelectorAll(".tab-fret-cell.chord-member");
+    expect(chordCells).toHaveLength(3);
+  });
+
+  it("supports marking a note with a hammer-on technique, rendered with an 'h' suffix", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    const fretInput = screen.getByLabelText(/^fret$/i);
+    await user.clear(fretInput);
+    await user.type(fretInput, "2");
+    await user.selectOptions(screen.getByLabelText(/technique/i), "hammer_on");
+    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
+
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
+    expect(fretTexts).toContain("h2");
+  });
+
+  it("supports marking a note with a slide technique and slide-to-fret, rendered as '<fret>s<target>'", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    const fretInput = screen.getByLabelText(/^fret$/i);
+    await user.clear(fretInput);
+    await user.type(fretInput, "2");
+    await user.selectOptions(screen.getByLabelText(/technique/i), "slide");
+
+    const slideInput = screen.getByLabelText(/slide to fret/i);
+    await user.clear(slideInput);
+    await user.type(slideInput, "5");
+    await user.click(screen.getByRole("button", { name: /\+ add note/i }));
+
+    const fretCells = container.querySelectorAll(".tab-fret-cell");
+    const fretTexts = Array.from(fretCells).map((el) => el.textContent);
+    expect(fretTexts).toContain("2s5");
   });
 });

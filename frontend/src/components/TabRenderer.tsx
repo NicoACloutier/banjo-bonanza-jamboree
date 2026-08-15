@@ -1,16 +1,45 @@
 /**
  * Renders a tab as ASCII-style banjo tablature: one row per string, with
- * fret numbers in playback order, split into lines (systems), and lyrics
- * displayed below each line at the note they're anchored to.
+ * fret numbers (and technique annotations) in playback order, split into
+ * lines (systems), and lyrics displayed below each line at the note
+ * they're anchored to.
+ *
+ * A note slot may show more than one string sounding at once (a chord) --
+ * each string's row independently shows its own fret in that column.
+ * Techniques are shown as a short suffix on the fret number, following
+ * standard tab notation conventions:
+ *   - hammer-on:  "0h2"  (the fret written on the *previous* cell for that
+ *     string already shows the starting fret; this cell shows "h" + fret)
+ *   - pull-off:   "2p0"
+ *   - slide:      "2s4"  (slides from the fret shown into `slide_to_fret`)
  *
  * Also supports an "editable" mode, in which each fret cell is clickable
- * (used by the editor to select which note/string/fret to edit) and the
- * currently-selected note is highlighted.
+ * (used by the editor to select which note to edit) and the currently
+ * selected note is highlighted.
  */
 import { splitIntoLines } from "../lib/tabLayout";
-import type { NoteOut } from "../types/api";
+import type { NoteFretOut, NoteOut } from "../types/api";
 
 const STRING_LABELS = ["1", "2", "3", "4", "5"];
+
+const TECHNIQUE_SUFFIX: Record<NoteFretOut["technique"], string> = {
+  normal: "",
+  hammer_on: "h",
+  pull_off: "p",
+  slide: "s",
+};
+
+/** Render a single fret's cell text, e.g. "2", "h2", "2p0", "2s4". */
+function fretCellText(fretEvent: NoteFretOut): string {
+  const suffix = TECHNIQUE_SUFFIX[fretEvent.technique];
+  if (fretEvent.technique === "slide" && fretEvent.slide_to_fret !== null) {
+    return `${fretEvent.fret}${suffix}${fretEvent.slide_to_fret}`;
+  }
+  if (fretEvent.technique === "hammer_on" || fretEvent.technique === "pull_off") {
+    return `${suffix}${fretEvent.fret}`;
+  }
+  return `${fretEvent.fret}`;
+}
 
 interface TabRendererProps {
   notes: NoteOut[];
@@ -36,9 +65,10 @@ export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick 
               <div className="tab-string-row" key={stringNumber}>
                 <span className="tab-string-label">{label}</span>
                 {line.map((note) => {
-                  const onThisString = note.string_number === stringNumber;
+                  const fretOnThisString = note.frets.find((f) => f.string_number === stringNumber);
                   const isPlaying = note.id === playingNoteId;
                   const isSelected = note.id === selectedNoteId;
+                  const isChord = note.frets.length > 1;
                   return (
                     <span
                       key={note.id}
@@ -47,6 +77,7 @@ export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick 
                         isPlaying ? "playing" : "",
                         isSelected ? "selected" : "",
                         onNoteClick ? "clickable" : "",
+                        fretOnThisString && isChord ? "chord-member" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -60,7 +91,7 @@ export function TabRenderer({ notes, playingNoteId, selectedNoteId, onNoteClick 
                           : undefined
                       }
                     >
-                      {note.is_rest ? "" : onThisString ? note.fret : "-"}
+                      {note.is_rest ? "" : fretOnThisString ? fretCellText(fretOnThisString) : "-"}
                     </span>
                   );
                 })}

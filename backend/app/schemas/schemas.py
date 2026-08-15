@@ -62,28 +62,53 @@ class UserPublic(msgspec.Struct):
 # ---------------------------------------------------------------------------
 
 
-class NoteIn(msgspec.Struct):
-    position: int
+class TechniqueOut(str, Enum):
+    normal = "normal"
+    hammer_on = "hammer_on"
+    pull_off = "pull_off"
+    slide = "slide"
+
+
+class NoteFretIn(msgspec.Struct):
+    """One string/fret (with optional technique) within a note slot."""
+
     string_number: int
     fret: int
+    technique: TechniqueOut = TechniqueOut.normal
+    # Only meaningful when technique == slide: the fret slid *into*.
+    slide_to_fret: int | None = None
+
+
+class NoteFretOut(msgspec.Struct):
+    string_number: int
+    fret: int
+    technique: TechniqueOut = TechniqueOut.normal
+    slide_to_fret: int | None = None
+
+
+class NoteIn(msgspec.Struct):
+    position: int
     duration_beats: float = 1.0
     line_break: bool = False
     lyric: str | None = None
-    # A rest: no sound, no fret number shown -- just extra time/space before
-    # the next note. `string_number`/`fret` are ignored (but still required
-    # for schema simplicity; conventionally sent as 1/0 for rests).
+    # A rest: no sound, no fret numbers shown -- just extra time/space before
+    # the next note. `frets` must be empty for a rest.
     is_rest: bool = False
+    # One entry per string sounded at this position; more than one entry
+    # means a chord (multiple strings struck simultaneously). Must contain
+    # exactly one entry per distinct string_number (1-5), and must be empty
+    # when `is_rest` is true.
+    frets: list[NoteFretIn] = msgspec.field(default_factory=list)
 
 
 class NoteOut(msgspec.Struct):
     id: str
     position: int
-    string_number: int
-    fret: int
     duration_beats: float
     line_break: bool
     lyric: str | None = None
     is_rest: bool = False
+    frets: list[NoteFretOut] = msgspec.field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
