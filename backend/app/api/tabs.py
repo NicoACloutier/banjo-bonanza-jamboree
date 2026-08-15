@@ -45,7 +45,6 @@ from app.services.converters import (
     tab_to_detail,
     tab_to_summary,
 )
-from app.services.moderation import find_offending_fields
 
 router = APIRouter(prefix="/api/tabs", tags=["tabs"])
 
@@ -273,22 +272,6 @@ async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
         await db.execute(TabRevision.__table__.delete().where(TabRevision.id.in_(stale_ids)))
 
 
-def _check_moderation(song_name: str, artist: str | None, album: str | None, notes_in) -> None:
-    fields = {"song_name": song_name, "artist": artist, "album": album}
-    for i, note in enumerate(notes_in):
-        if note.lyric:
-            fields[f"lyric[{i}]"] = note.lyric
-    offending = find_offending_fields(fields)
-    if offending:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "This tab contains language that is not allowed (offensive or insensitive "
-                f"content detected in: {', '.join(offending)}). Please edit and try again."
-            ),
-        )
-
-
 @router.post("")
 async def create_tab(
     request: Request,
@@ -311,9 +294,6 @@ async def create_tab(
         owner = await _get_or_create_anonymous_user(db)
     else:
         owner = user
-
-    if body.publish:
-        _check_moderation(body.song_name, body.artist, body.album, body.notes)
 
     tab = Tab(
         owner_id=owner.id,
@@ -426,9 +406,6 @@ async def update_tab(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tab not found.")
     if tab.owner_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this tab.")
-
-    if body.publish:
-        _check_moderation(body.song_name, body.artist, body.album, body.notes)
 
     # Snapshot the tab's state *before* applying the incoming changes, so
     # this becomes a restorable point in its revision history.

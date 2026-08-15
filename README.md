@@ -24,8 +24,6 @@ tablature -- built with an old-timey, "log cabin" aesthetic.
   sharp/flat meter.
 - **Auth**: username/password (Argon2id-hashed) and Google OAuth2 (authorization
   code flow), with short-lived JWT access tokens and rotating refresh tokens.
-- **Content moderation**: song names, artists, albums, and lyrics are
-  screened for slurs/hate speech before a tab can be published.
 
 ## Tech stack
 
@@ -46,7 +44,7 @@ backend/
     core/        # config, database, security, tunings, msgspec helpers
     models/      # SQLAlchemy ORM models
     schemas/     # msgspec Struct request/response schemas
-    services/    # converters, moderation, audio theory, Google OAuth2
+    services/    # converters, audio theory, Google OAuth2
   alembic/       # DB migrations
   tests/         # pytest test suite
 frontend/
@@ -126,5 +124,3 @@ in the source.
 - Access tokens are short-lived signed JWTs.
 - Google OAuth2 uses the standard authorization-code flow; client secrets
   never touch the frontend.
-- Publishing a tab is blocked if song name/artist/album/lyrics contain
-  slurs or hate speech (see `backend/app/services/moderation.py`).
