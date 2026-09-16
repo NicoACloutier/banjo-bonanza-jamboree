@@ -1,9 +1,8 @@
 /**
  * Tab creation/editing UI.
  *
- * The song is laid out as a grid of note slots (16 to a line), added in
- * bulk via "+ Add 1 empty note" / "+ Add a line" -- there's no separate
- * one-note-at-a-time "Add a note" form. Every note starts blank (all "-"
+ * The song is laid out as a grid of note slots, added a whole line (16
+ * notes) at a time via "+ Add a line". Every note starts blank (all "-"
  * on every string): fret numbers are typed directly into the tab preview
  * by clicking a string's cell for that note, and lyrics are typed
  * directly into the small text box below each note. A note left blank on
@@ -12,9 +11,11 @@
  * Selecting a note (by clicking any of its cells) opens a small side
  * panel for its duration and per-string playing technique (hammer-on,
  * pull-off, slide, bend, drop-thumb) and roll-pattern finger, since those
- * don't fit naturally into a single typed character.
+ * don't fit naturally into a single typed character. Each technique can
+ * also be applied with a single keystroke (see `TECHNIQUE_SHORTCUTS`)
+ * while a note with at least one fret is selected.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TabRenderer } from "./TabRenderer";
 import type { NoteFretIn, NoteOut, RightHandFinger, Technique, TuningOut } from "../types/api";
 
@@ -26,6 +27,8 @@ export interface TabMetadata {
   tempoBpm: number;
   /** Physical capo position (0 = no capo), 0-12 frets. */
   capoFret: number;
+  /** How many bars each rendered line of 16 notes is visually divided into (1, 2, or 4). */
+  barsPerLine: number;
 }
 
 interface TabEditorProps {
@@ -37,13 +40,39 @@ interface TabEditorProps {
 }
 
 const TECHNIQUE_OPTIONS: { label: string; value: Technique }[] = [
-  { label: "Picked (normal)", value: "normal" },
-  { label: "Hammer-on", value: "hammer_on" },
-  { label: "Pull-off", value: "pull_off" },
-  { label: "Slide", value: "slide" },
-  { label: "Bend/choke", value: "bend" },
-  { label: "Drop-thumb (clawhammer)", value: "drop_thumb" },
+  { label: "Normal (n)", value: "normal" },
+  { label: "Hammer-on (h)", value: "hammer_on" },
+  { label: "Pull-off (p)", value: "pull_off" },
+  { label: "Slide (s)", value: "slide" },
+  { label: "Bend/choke (b)", value: "bend" },
+  { label: "Drop-thumb (d)", value: "drop_thumb" },
 ];
+
+/**
+ * Single-key shortcuts for setting the selected note's technique without
+ * opening the dropdown -- active whenever a note with at least one fret is
+ * selected and focus isn't in a text field (see the keydown effect below).
+ */
+const TECHNIQUE_SHORTCUTS: Record<string, Technique> = {
+  n: "normal",
+  h: "hammer_on",
+  p: "pull_off",
+  s: "slide",
+  b: "bend",
+  d: "drop_thumb",
+};
+
+/** How many bars a line of 16 notes can be visually divided into. */
+const BAR_OPTIONS = [1, 2, 4] as const;
+
+/** Patch applied when a fret's technique changes, resetting/defaulting technique-specific fields. */
+function techniquePatch(fret: NoteFretIn, technique: Technique): Partial<NoteFretIn> {
+  return {
+    technique,
+    slide_to_fret: technique === "slide" ? (fret.slide_to_fret ?? fret.fret + 2) : null,
+    bend_semitones: technique === "bend" ? (fret.bend_semitones ?? 1) : null,
+  };
+}
 
 const FINGER_OPTIONS: { label: string; value: RightHandFinger | "" }[] = [
   { label: "(none)", value: "" },
@@ -69,10 +98,10 @@ export const NOTES_PER_LINE = 16;
  * slot with no strings picked yet, so it renders as a row of dashes ("-")
  * in every string in the preview until the user clicks a string's cell
  * and types a fret number. This is what a freshly-created tab is
- * pre-populated with, and what "+ Add 1 empty note" / "+ Add a line"
- * append -- letting users lay out the song's length first and fill in
- * the actual notes afterward. Left unfilled, it plays silently at save
- * time, identical to a rest (see backend `_validate_notes`).
+ * pre-populated with, and what "+ Add a line" appends -- letting users
+ * lay out the song's length first and fill in the actual notes
+ * afterward. Left unfilled, it plays silently at save time, identical to
+ * a rest (see backend `_validate_notes`).
  */
 export function createEmptyNote(position: number): NoteOut {
   return {
@@ -103,14 +132,7 @@ function FretRowEditor({
         Technique
         <select
           value={fret.technique}
-          onChange={(e) => {
-            const technique = e.target.value as Technique;
-            onChange({
-              technique,
-              slide_to_fret: technique === "slide" ? fret.slide_to_fret ?? fret.fret + 2 : null,
-              bend_semitones: technique === "bend" ? fret.bend_semitones ?? 1 : null,
-            });
-          }}
+          onChange={(e) => onChange(techniquePatch(fret, e.target.value as Technique))}
         >
           {TECHNIQUE_OPTIONS.map((t) => (
             <option key={t.value} value={t.value}>
@@ -162,22 +184,61 @@ function FretRowEditor({
 
 export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesChange }: TabEditorProps) {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  // Copy/paste: a contiguous range of note ids the user has copied, so a
-  // chorus (etc.) can be reused elsewhere without retabbing it -- only the
-  // lyric typically needs editing afterward.
-  const [rangeStartId, setRangeStartId] = useState<string | null>(null);
-  const [rangeEndId, setRangeEndId] = useState<string | null>(null);
+  // Copy/paste range: identified by line number + note-within-line number
+  // (both 0-indexed) rather than a note id, so the pickers can be two plain
+  // "Line" / "Note in line" dropdowns.
+  const [rangeStartLine, setRangeStartLine] = useState(0);
+  const [rangeStartNoteInLine, setRangeStartNoteInLine] = useState(0);
+  const [rangeEndLine, setRangeEndLine] = useState(0);
+  const [rangeEndNoteInLine, setRangeEndNoteInLine] = useState(0);
   const [clipboard, setClipboard] = useState<NoteOut[] | null>(null);
 
   const selectedNote = useMemo(() => notes.find((n) => n.id === selectedNoteId) ?? null, [notes, selectedNoteId]);
 
-  const removeSelectedNote = () => {
+  const totalLines = Math.max(1, Math.ceil(notes.length / NOTES_PER_LINE));
+  const notesInLine = (lineIdx: number) =>
+    Math.min(NOTES_PER_LINE, Math.max(0, notes.length - lineIdx * NOTES_PER_LINE));
+  const noteAtRangePoint = (lineIdx: number, noteInLineIdx: number): NoteOut | null =>
+    notes[lineIdx * NOTES_PER_LINE + noteInLineIdx] ?? null;
+  const rangeStartNote = noteAtRangePoint(rangeStartLine, rangeStartNoteInLine);
+  const rangeEndNote = noteAtRangePoint(rangeEndLine, rangeEndNoteInLine);
+
+  // Keyboard shortcuts for setting the selected note's technique (see
+  // TECHNIQUE_SHORTCUTS) -- active whenever a note with at least one fret
+  // is selected, ignoring keystrokes aimed at a text field (song name,
+  // lyric box, etc). The inline fret-number input is a deliberate
+  // exception: it only ever accepts digits, so a letter typed there can't
+  // mean anything *except* a technique shortcut -- if we ignored it, typing
+  // "h" right after clicking a note (while that input still has focus)
+  // would silently do nothing.
+  useEffect(() => {
+    if (!selectedNote || selectedNote.frets.length === 0) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const isFretInput = target?.classList.contains("tab-fret-cell-input");
+      if (!isFretInput && (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT")) {
+        return;
+      }
+      const technique = TECHNIQUE_SHORTCUTS[e.key.toLowerCase()];
+      if (!technique) return;
+      e.preventDefault();
+      onNotesChange(
+        notes.map((n) =>
+          n.id === selectedNote.id
+            ? { ...n, frets: n.frets.map((f) => ({ ...f, ...techniquePatch(f, technique) })) }
+            : n,
+        ),
+      );
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedNote, notes, onNotesChange]);
+
+  /** Reset the selected note back to blank (all "-") without removing its slot from the tab. */
+  const clearSelectedNote = () => {
     if (!selectedNote) return;
-    const remaining = notes
-      .filter((n) => n.id !== selectedNote.id)
-      .map((n, idx) => ({ ...n, position: idx }));
-    onNotesChange(remaining);
-    setSelectedNoteId(null);
+    onNotesChange(notes.map((n) => (n.id === selectedNote.id ? { ...n, frets: [] } : n)));
   };
 
   /**
@@ -262,6 +323,21 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
 
   return (
     <div>
+      <div className="toolbar">
+        <span>Bars per line:</span>
+        {BAR_OPTIONS.map((n) => (
+          <button
+            key={n}
+            type="button"
+            className={metadata.barsPerLine === n ? "" : "secondary"}
+            aria-pressed={metadata.barsPerLine === n}
+            onClick={() => onMetadataChange({ ...metadata, barsPerLine: n })}
+          >
+            {n} {n === 1 ? "bar" : "bars"}
+          </button>
+        ))}
+      </div>
+
       <div className="form-row">
         <label>
           Song name (required)
@@ -329,114 +405,153 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       <h3>Tab preview</h3>
       <p className="muted-text">
         Click a string's cell to type its fret number directly (leave it blank/backspace it to clear that
-        string back to "-"). Click a note's tiny duration label above the strings to cycle its length, and
-        type lyrics straight into the box below each note. A note left blank on every string plays as
-        silence. Use the buttons below to add more empty notes to the end of the song.
+        string back to "-"). Type lyrics straight into the box below each note.
       </p>
-      <TabRenderer
-        notes={notes}
-        selectedNoteId={selectedNoteId}
-        onNoteClick={(note) => setSelectedNoteId(note.id)}
-        onFretChange={handleFretChange}
-        onLyricChange={handleLyricChange}
-        onDurationCycle={handleDurationCycle}
-      />
-      <div className="toolbar">
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => onNotesChange([...notes, createEmptyNote(notes.length)])}
-        >
-          + Add 1 empty note
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() =>
-            onNotesChange([
-              ...notes,
-              ...Array.from({ length: NOTES_PER_LINE }, (_, i) => createEmptyNote(notes.length + i)),
-            ])
-          }
-        >
-          + Add a line
-        </button>
-      </div>
-
-      {selectedNote && (
-        <div className="panel">
-          <h3>Edit selected note</h3>
-          {selectedNote.frets.length === 0 ? (
-            <p className="muted-text">
-              This note is blank on every string (a rest). Click one of its cells in the tab above and type a
-              fret number to give it a sound.
-            </p>
-          ) : (
-            <>
-              {selectedNote.frets.length > 1 && (
-                <p className="muted-text">
-                  This note has {selectedNote.frets.length} strings selected -- it will play as a chord.
-                </p>
-              )}
-              {selectedNote.frets
-                .slice()
-                .sort((a, b) => a.string_number - b.string_number)
-                .map((fret) => (
-                  <FretRowEditor
-                    key={fret.string_number}
-                    fret={fret}
-                    onChange={(patch) => updateSelectedNoteFret(fret.string_number, patch)}
-                  />
-                ))}
-            </>
-          )}
-          <div className="form-row">
-            <button className="secondary" onClick={removeSelectedNote}>
-              Delete this note
-            </button>
-            <button className="secondary" onClick={removeSelectedLine}>
-              Remove line
+      <div className={selectedNote ? "tab-with-editor" : undefined}>
+        <div className="tab-preview-col">
+          <TabRenderer
+            notes={notes}
+            barsPerLine={metadata.barsPerLine}
+            selectedNoteId={selectedNoteId}
+            onNoteClick={(note) => setSelectedNoteId(note.id)}
+            onFretChange={handleFretChange}
+            onLyricChange={handleLyricChange}
+            onDurationCycle={handleDurationCycle}
+          />
+          <div className="toolbar">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() =>
+                onNotesChange([
+                  ...notes,
+                  ...Array.from({ length: NOTES_PER_LINE }, (_, i) => createEmptyNote(notes.length + i)),
+                ])
+              }
+            >
+              + Add a line
             </button>
           </div>
         </div>
-      )}
+
+        {selectedNote && (
+          <div className="edit-note-col">
+            <div className="panel">
+              <h3>Edit selected note</h3>
+              {selectedNote.frets.length === 0 ? (
+                <p className="muted-text">
+                  This note is blank on every string (a rest). Click one of its cells in the tab above and
+                  type a fret number to give it a sound.
+                </p>
+              ) : (
+                <>
+                  {selectedNote.frets.length > 1 && (
+                    <p className="muted-text">
+                      This note has {selectedNote.frets.length} strings selected -- it will play as a chord.
+                    </p>
+                  )}
+                  {selectedNote.frets
+                    .slice()
+                    .sort((a, b) => a.string_number - b.string_number)
+                    .map((fret) => (
+                      <FretRowEditor
+                        key={fret.string_number}
+                        fret={fret}
+                        onChange={(patch) => updateSelectedNoteFret(fret.string_number, patch)}
+                      />
+                    ))}
+                </>
+              )}
+              <div className="form-row">
+                <button className="secondary" onClick={clearSelectedNote}>
+                  Clear this note
+                </button>
+                <button className="secondary" onClick={removeSelectedLine}>
+                  Remove line
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="panel">
         <h3>Copy / paste a range</h3>
         <p className="muted-text">
-          Select a start and end note (e.g. the chorus), copy it, then paste it back in after selecting
-          where it should go -- handy for reusing a section and just changing the lyrics.
+          Pick a start and end note (e.g. the chorus) by line + note-in-line, copy it, then paste it back
+          in after selecting where it should go -- handy for reusing a section and just changing the
+          lyrics.
         </p>
         <div className="form-row">
           <label>
-            Range start
-            <select value={rangeStartId ?? ""} onChange={(e) => setRangeStartId(e.target.value || null)}>
-              <option value="">(none)</option>
-              {notes.map((n, idx) => (
-                <option key={n.id} value={n.id}>
-                  Note {idx + 1}
+            Range start (line)
+            <select
+              value={rangeStartLine}
+              onChange={(e) => {
+                const line = Number(e.target.value);
+                setRangeStartLine(line);
+                setRangeStartNoteInLine((prev) => Math.min(prev, Math.max(0, notesInLine(line) - 1)));
+              }}
+            >
+              {Array.from({ length: totalLines }, (_, i) => (
+                <option key={i} value={i}>
+                  Line {i + 1}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Range end
-            <select value={rangeEndId ?? ""} onChange={(e) => setRangeEndId(e.target.value || null)}>
-              <option value="">(none)</option>
-              {notes.map((n, idx) => (
-                <option key={n.id} value={n.id}>
-                  Note {idx + 1}
+            Range start (note in line)
+            <select
+              value={rangeStartNoteInLine}
+              onChange={(e) => setRangeStartNoteInLine(Number(e.target.value))}
+            >
+              {Array.from({ length: notesInLine(rangeStartLine) }, (_, i) => (
+                <option key={i} value={i}>
+                  Note {i + 1}
                 </option>
               ))}
             </select>
           </label>
+        </div>
+        <div className="form-row">
+          <label>
+            Range end (line)
+            <select
+              value={rangeEndLine}
+              onChange={(e) => {
+                const line = Number(e.target.value);
+                setRangeEndLine(line);
+                setRangeEndNoteInLine((prev) => Math.min(prev, Math.max(0, notesInLine(line) - 1)));
+              }}
+            >
+              {Array.from({ length: totalLines }, (_, i) => (
+                <option key={i} value={i}>
+                  Line {i + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Range end (note in line)
+            <select value={rangeEndNoteInLine} onChange={(e) => setRangeEndNoteInLine(Number(e.target.value))}>
+              {Array.from({ length: notesInLine(rangeEndLine) }, (_, i) => (
+                <option key={i} value={i}>
+                  Note {i + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="form-row">
           <button
             type="button"
             className="secondary"
-            disabled={!rangeStartId || !rangeEndId}
+            disabled={!rangeStartNote || !rangeEndNote}
             onClick={() => {
-              const startIdx = notes.findIndex((n) => n.id === rangeStartId);
-              const endIdx = notes.findIndex((n) => n.id === rangeEndId);
+              if (!rangeStartNote || !rangeEndNote) return;
+              const startIdx = notes.findIndex((n) => n.id === rangeStartNote.id);
+              const endIdx = notes.findIndex((n) => n.id === rangeEndNote.id);
               if (startIdx === -1 || endIdx === -1) return;
               const [lo, hi] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
               setClipboard(notes.slice(lo, hi + 1));

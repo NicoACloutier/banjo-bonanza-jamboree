@@ -48,7 +48,7 @@ class Settings:
     )
 
     # --- App info ---
-    app_name: str = os.getenv("APP_NAME", "Banjo Tabs")
+    app_name: str = os.getenv("APP_NAME", "Banjo Bonanza Jamboree")
 
 
 @lru_cache

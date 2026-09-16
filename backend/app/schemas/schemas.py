@@ -138,6 +138,8 @@ class TabCreateRequest(msgspec.Struct):
     tempo_bpm: int = 100
     # Capo position in frets (0 = no capo).
     capo_fret: int = 0
+    # How many bars each 16-note line is visually divided into (1, 2, or 4).
+    bars_per_line: int = 4
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
 
@@ -149,6 +151,7 @@ class TabUpdateRequest(msgspec.Struct):
     album: str | None = None
     tempo_bpm: int = 100
     capo_fret: int = 0
+    bars_per_line: int = 4
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
 
@@ -178,6 +181,7 @@ class TabDetail(msgspec.Struct):
     tuning_key: str
     tempo_bpm: int
     capo_fret: int
+    bars_per_line: int
     status: TabStatusOut
     vote_count: int
     owner_id: str
@@ -238,4 +242,5 @@ class TabRevisionDetail(msgspec.Struct):
     tuning_key: str
     tempo_bpm: int
     capo_fret: int
+    bars_per_line: int
     notes: list[NoteOut]

@@ -44,6 +44,7 @@ export function TabEditorPage() {
     tuningKey: FALLBACK_TUNINGS[0].key,
     tempoBpm: 100,
     capoFret: 0,
+    barsPerLine: 4,
   });
   const [notes, setNotes] = useState<NoteOut[]>(() =>
     // New tabs start with 10 empty (rest) note slots the user can click to
@@ -73,6 +74,7 @@ export function TabEditorPage() {
           tuningKey: tab.tuning_key,
           tempoBpm: tab.tempo_bpm,
           capoFret: tab.capo_fret,
+          barsPerLine: tab.bars_per_line,
         });
         setNotes(tab.notes);
       })
@@ -100,6 +102,7 @@ export function TabEditorPage() {
           tuning_key: metadata.tuningKey,
           tempo_bpm: metadata.tempoBpm,
           capo_fret: metadata.capoFret,
+          bars_per_line: metadata.barsPerLine,
           notes: notesToNoteIn(notes),
           publish,
         };

@@ -52,6 +52,7 @@ _TAB_LOAD_OPTIONS = (selectinload(Tab.owner), selectinload(Tab.notes).selectinlo
 
 _MAX_REVISIONS_PER_TAB = 50
 _MAX_CAPO_FRET = 12
+_VALID_BARS_PER_LINE = {1, 2, 4}
 
 
 async def _get_or_create_anonymous_user(db: AsyncSession) -> User:
@@ -88,6 +89,14 @@ def _validate_capo(capo_fret: int) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"capo_fret must be between 0 and {_MAX_CAPO_FRET}.",
+        )
+
+
+def _validate_bars_per_line(bars_per_line: int) -> None:
+    if bars_per_line not in _VALID_BARS_PER_LINE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="bars_per_line must be 1, 2, or 4.",
         )
 
 
@@ -234,6 +243,7 @@ async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
         album=tab.album,
         tempo_bpm=tab.tempo_bpm,
         capo_fret=tab.capo_fret,
+        bars_per_line=tab.bars_per_line,
         notes=[
             NoteIn(
                 position=n.position,
@@ -283,6 +293,7 @@ async def create_tab(
     body = await parse_json_body(request, TabCreateRequest)
     _validate_tuning(body.tuning_key)
     _validate_capo(body.capo_fret)
+    _validate_bars_per_line(body.bars_per_line)
     _validate_notes(body.notes)
 
     if user is None:
@@ -305,6 +316,7 @@ async def create_tab(
         tuning_key=body.tuning_key,
         tempo_bpm=max(20, min(400, body.tempo_bpm)),
         capo_fret=body.capo_fret,
+        bars_per_line=body.bars_per_line,
         status=TabStatus.published if body.publish else TabStatus.draft,
     )
     db.add(tab)
@@ -400,6 +412,7 @@ async def update_tab(
     body = await parse_json_body(request, TabUpdateRequest)
     _validate_tuning(body.tuning_key)
     _validate_capo(body.capo_fret)
+    _validate_bars_per_line(body.bars_per_line)
     _validate_notes(body.notes)
 
     result = await db.execute(select(Tab).where(Tab.id == tab_id).options(*_TAB_LOAD_OPTIONS))
@@ -419,6 +432,7 @@ async def update_tab(
     tab.tuning_key = body.tuning_key
     tab.tempo_bpm = max(20, min(400, body.tempo_bpm))
     tab.capo_fret = body.capo_fret
+    tab.bars_per_line = body.bars_per_line
     tab.status = TabStatus.published if body.publish else TabStatus.draft
     await _replace_notes(db, tab, body.notes)
     await db.commit()
@@ -506,6 +520,7 @@ async def restore_tab_revision(
     snapshot = msgspec.json.decode(revision.snapshot_json, type=TabUpdateRequest)
     _validate_tuning(snapshot.tuning_key)
     _validate_capo(snapshot.capo_fret)
+    _validate_bars_per_line(snapshot.bars_per_line)
     _validate_notes(snapshot.notes)
 
     await _save_revision_snapshot(db, tab)
@@ -516,6 +531,7 @@ async def restore_tab_revision(
     tab.tuning_key = snapshot.tuning_key
     tab.tempo_bpm = max(20, min(400, snapshot.tempo_bpm))
     tab.capo_fret = snapshot.capo_fret
+    tab.bars_per_line = snapshot.bars_per_line
     tab.status = TabStatus.published if snapshot.publish else TabStatus.draft
     await _replace_notes(db, tab, snapshot.notes)
     await db.commit()

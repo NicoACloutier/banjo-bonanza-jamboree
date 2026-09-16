@@ -22,7 +22,7 @@ export function TunerPage() {
     <div className="panel">
       <h1>Banjo Tuner</h1>
       <p className="muted-text">
-        Select your tuning (and any transposition, e.g. "sawmill tuned up 2 frets"), then start the
+        Select your tuning (and any transposition), then start the
         tuner and pluck a string. Requires microphone access.
       </p>
       <TunerPanel tunings={tunings} />

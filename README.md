@@ -1,4 +1,4 @@
-# Banjo Tabs
+# Banjo Bonanza Jamboree
 
 A full-stack web app for creating, browsing, and playing back 5-string banjo
 tablature -- built with an old-timey, "log cabin" aesthetic.

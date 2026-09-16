@@ -12,6 +12,11 @@
  *     string already shows the starting fret; this cell shows "h" + fret)
  *   - pull-off:   "2p0"
  *   - slide:      "2s4"  (slides from the fret shown into `slide_to_fret`)
+ *   - drop-thumb: "5d"   (right-hand drop-thumb technique on this fret; also
+ *     underlined -- see `.tab-fret-cell.drop-thumb` in theme.css)
+ *
+ * A line of `barsPerLine` bars (1, 2, or 4) draws a vertical divider before
+ * every Nth note within the line, purely a visual grouping aid.
  *
  * Also supports an "editable" mode (when `onFretEdit` is supplied), in
  * which:
@@ -30,7 +35,7 @@
  * simply plays no sound.
  */
 import { useState } from "react";
-import { splitIntoLines } from "../lib/tabLayout";
+import { NOTES_PER_LINE, splitIntoLines } from "../lib/tabLayout";
 import type { NoteFretOut, NoteOut } from "../types/api";
 
 const STRING_LABELS = ["1", "2", "3", "4", "5"];
@@ -51,7 +56,7 @@ const TECHNIQUE_SUFFIX: Record<NoteFretOut["technique"], string> = {
   pull_off: "p",
   slide: "s",
   bend: "b",
-  drop_thumb: "", // no visual change -- annotated via right_hand_finger only
+  drop_thumb: "d",
 };
 
 /** Abbreviation shown for an optional right-hand roll-pattern annotation. */
@@ -72,7 +77,8 @@ function fretCellText(fretEvent: NoteFretOut): string {
   } else if (fretEvent.technique === "hammer_on" || fretEvent.technique === "pull_off") {
     text = `${suffix}${fretEvent.fret}`;
   } else {
-    text = `${fretEvent.fret}`;
+    // "normal" has an empty suffix; "drop_thumb" appends its "d" label here.
+    text = `${fretEvent.fret}${suffix}`;
   }
   if (fretEvent.right_hand_finger) {
     text += FINGER_ABBR[fretEvent.right_hand_finger];
@@ -82,6 +88,8 @@ function fretCellText(fretEvent: NoteFretOut): string {
 
 interface TabRendererProps {
   notes: NoteOut[];
+  /** How many bars each line of notes is visually divided into (1, 2, or 4); defaults to 1 (no internal dividers). */
+  barsPerLine?: number;
   playingNoteId?: string | null;
   selectedNoteId?: string | null;
   onNoteClick?: (note: NoteOut) => void;
@@ -102,10 +110,13 @@ interface TabRendererProps {
 interface EditingCell {
   noteId: string;
   stringNumber: number;
+  /** True if this string had no fret before this editing session started (see the Escape handler below). */
+  wasBlank: boolean;
 }
 
 export function TabRenderer({
   notes,
+  barsPerLine = 1,
   playingNoteId,
   selectedNoteId,
   onNoteClick,
@@ -118,6 +129,9 @@ export function TabRenderer({
   const [editingValue, setEditingValue] = useState("");
 
   const lines = splitIntoLines(notes);
+  // Notes per bar within a line, e.g. 4 bars per 16-note line = 4 notes/bar.
+  const notesPerBar = Math.max(1, Math.floor(NOTES_PER_LINE / barsPerLine));
+  const isBarBreak = (noteIndexInLine: number) => noteIndexInLine > 0 && noteIndexInLine % notesPerBar === 0;
 
   if (lines.length === 0) {
     return <p className="muted-text">No notes yet -- add some below to start your tab.</p>;
@@ -144,13 +158,15 @@ export function TabRenderer({
         <div className="tab-line" key={lineIndex} data-line-index={lineIndex}>
           {editable && (
             <div className="tab-duration-row">
-              {line.map((note) => {
+              {line.map((note, noteIndex) => {
                 const abbr = DURATION_ABBR[note.duration_beats] ?? `${note.duration_beats}b`;
                 return (
                   <button
                     key={note.id}
                     type="button"
-                    className="duration-marker"
+                    className={["duration-marker", isBarBreak(noteIndex) ? "bar-break" : ""]
+                      .filter(Boolean)
+                      .join(" ")}
                     title="Click to change this note's duration"
                     onClick={() => {
                       onNoteClick?.(note);
@@ -168,11 +184,12 @@ export function TabRenderer({
             return (
               <div className="tab-string-row" key={stringNumber}>
                 <span className="tab-string-label">{label}</span>
-                {line.map((note) => {
+                {line.map((note, noteIndex) => {
                   const fretOnThisString = note.frets.find((f) => f.string_number === stringNumber);
                   const isPlaying = note.id === playingNoteId;
                   const isSelected = note.id === selectedNoteId;
                   const isChord = note.frets.length > 1;
+                  const barBreak = isBarBreak(noteIndex);
                   const isEditingThisCell =
                     editingCell?.noteId === note.id && editingCell?.stringNumber === stringNumber;
 
@@ -180,10 +197,12 @@ export function TabRenderer({
                     return (
                       <input
                         key={note.id}
-                        className="tab-fret-cell tab-fret-cell-input"
+                        className={["tab-fret-cell", "tab-fret-cell-input", barBreak ? "bar-break" : ""]
+                          .filter(Boolean)
+                          .join(" ")}
                         type="text"
                         inputMode="numeric"
-                        autoFocus
+                        ref={(el) => el?.focus({ preventScroll: true })}
                         value={editingValue}
                         aria-label={`Fret for string ${stringNumber}`}
                         onChange={(e) => setEditingValue(e.target.value.replace(/[^0-9]/g, ""))}
@@ -194,6 +213,10 @@ export function TabRenderer({
                             commitEditingCell();
                           } else if (e.key === "Escape") {
                             e.preventDefault();
+                            if (editingCell?.wasBlank) {
+                              // Undo the fret-0 placeholder committed when this cell was opened.
+                              onFretChange?.(editingCell.noteId, editingCell.stringNumber, null);
+                            }
                             setEditingCell(null);
                             setEditingValue("");
                           }
@@ -212,6 +235,7 @@ export function TabRenderer({
                         onNoteClick || editable ? "clickable" : "",
                         fretOnThisString && isChord ? "chord-member" : "",
                         fretOnThisString?.technique === "drop_thumb" ? "drop-thumb" : "",
+                        barBreak ? "bar-break" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -219,10 +243,16 @@ export function TabRenderer({
                       onClick={() => {
                         onNoteClick?.(note);
                         if (editable) {
-                          setEditingCell({ noteId: note.id, stringNumber });
-                          // Clicking a blank "-" cell activates that string at fret 0 (shown
-                          // immediately); an existing fret is edited in place. Backspacing the
-                          // input back to empty removes the string again (reverts to "-").
+                          const wasBlank = !fretOnThisString;
+                          if (wasBlank) {
+                            // Commit the fret-0 placeholder immediately (not just visually) so the
+                            // note is treated as filled-in right away -- e.g. the "Edit selected
+                            // note" panel and technique keyboard shortcuts work without first
+                            // pressing Enter to confirm the default "0".
+                            onFretChange?.(note.id, stringNumber, 0);
+                          }
+                          setEditingCell({ noteId: note.id, stringNumber, wasBlank });
+                          // An existing fret is edited in place; a blank "-" cell starts at "0".
                           setEditingValue(fretOnThisString ? String(fretOnThisString.fret) : "0");
                         }
                       }}
@@ -242,11 +272,14 @@ export function TabRenderer({
             );
           })}
           <div className="tab-lyrics-row">
-            {line.map((note) =>
-              editable ? (
+            {line.map((note, noteIndex) => {
+              const barBreak = isBarBreak(noteIndex);
+              return editable ? (
                 <input
                   key={note.id}
-                  className="lyric-token lyric-token-input"
+                  className={["lyric-token", "lyric-token-input", barBreak ? "bar-break" : ""]
+                    .filter(Boolean)
+                    .join(" ")}
                   type="text"
                   value={note.lyric ?? ""}
                   placeholder=""
@@ -255,11 +288,14 @@ export function TabRenderer({
                   onChange={(e) => onLyricChange?.(note.id, e.target.value)}
                 />
               ) : (
-                <span className="lyric-token" key={note.id}>
+                <span
+                  className={["lyric-token", barBreak ? "bar-break" : ""].filter(Boolean).join(" ")}
+                  key={note.id}
+                >
                   {note.lyric ?? ""}
                 </span>
-              ),
-            )}
+              );
+            })}
           </div>
         </div>
       ))}

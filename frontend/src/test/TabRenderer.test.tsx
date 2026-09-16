@@ -174,4 +174,25 @@ describe("TabRenderer", () => {
     expect(fretTexts).toContain("p0");
     expect(fretTexts).toContain("2s4");
   });
+
+  it("labels a drop-thumb fret with a 'd' suffix on the tab itself", () => {
+    const notes = [makeNote({ id: "a", position: 0, frets: [makeFret({ fret: 5, technique: "drop_thumb" })] })];
+    const { container } = render(<TabRenderer notes={notes} />);
+    const fretTexts = Array.from(container.querySelectorAll(".tab-fret-cell")).map((el) => el.textContent);
+    expect(fretTexts).toContain("5d");
+    expect(container.querySelectorAll(".tab-fret-cell.drop-thumb")).toHaveLength(1);
+  });
+
+  it("draws a bar-break divider before every Nth note per barsPerLine, in both editable and read-only mode", () => {
+    const notes = Array.from({ length: 16 }, (_, i) => makeNote({ id: `n${i}`, position: i, frets: [] }));
+    const { container } = render(<TabRenderer notes={notes} barsPerLine={4} />);
+    // 16 notes / 4 bars per line = a divider every 4 notes -- 3 breaks (at note 4, 8, 12) x 5 strings.
+    expect(container.querySelectorAll(".tab-fret-cell.bar-break")).toHaveLength(15);
+  });
+
+  it("draws no bar-break dividers when barsPerLine is 1 (the default)", () => {
+    const notes = Array.from({ length: 16 }, (_, i) => makeNote({ id: `n${i}`, position: i, frets: [] }));
+    const { container } = render(<TabRenderer notes={notes} />);
+    expect(container.querySelectorAll(".bar-break")).toHaveLength(0);
+  });
 });

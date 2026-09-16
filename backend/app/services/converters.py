@@ -71,6 +71,7 @@ def tab_to_detail(tab: Tab, vote_count: int, has_voted: bool) -> TabDetail:
         tuning_key=tab.tuning_key,
         tempo_bpm=tab.tempo_bpm,
         capo_fret=tab.capo_fret,
+        bars_per_line=tab.bars_per_line,
         status=TabStatusOut(tab.status.value),
         vote_count=vote_count,
         owner_id=tab.owner_id,
@@ -127,5 +128,6 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
         tuning_key=snapshot["tuning_key"],
         tempo_bpm=snapshot.get("tempo_bpm", 100),
         capo_fret=snapshot.get("capo_fret", 0),
+        bars_per_line=snapshot.get("bars_per_line", 4),
         notes=notes_out,
     )

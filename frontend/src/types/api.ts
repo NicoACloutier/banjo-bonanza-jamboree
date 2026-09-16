@@ -74,6 +74,8 @@ export interface TabCreateRequest {
   tempo_bpm: number;
   /** Capo position in frets (0 = no capo). */
   capo_fret: number;
+  /** How many bars each rendered line of 16 notes is visually divided into (1, 2, or 4). */
+  bars_per_line: number;
   notes: NoteIn[];
   publish: boolean;
 }
@@ -101,6 +103,7 @@ export interface TabDetail {
   tuning_key: string;
   tempo_bpm: number;
   capo_fret: number;
+  bars_per_line: number;
   status: TabStatus;
   vote_count: number;
   owner_id: string;
@@ -154,5 +157,6 @@ export interface TabRevisionDetail {
   tuning_key: string;
   tempo_bpm: number;
   capo_fret: number;
+  bars_per_line: number;
   notes: NoteOut[];
 }

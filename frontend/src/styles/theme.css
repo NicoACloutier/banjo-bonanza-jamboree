@@ -215,6 +215,27 @@ label select {
   overflow-x: auto;
 }
 
+/* Two-column layout for the editor: the tab preview (~3/4 width) beside the
+   "Edit selected note" panel (~1/4 width). The columns are siblings in one
+   flex row, so every tab line keeps this same width -- including lines
+   below the bottom of the (shorter) edit panel, which just leaves the area
+   beside them blank rather than letting those lines stretch full-width. */
+.tab-with-editor {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.tab-with-editor > .tab-preview-col {
+  flex: 3 1 0%;
+  min-width: 0;
+}
+
+.tab-with-editor > .edit-note-col {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
 .tab-line {
   margin-bottom: 1.75rem;
 }
@@ -266,6 +287,15 @@ label select {
    cell with a dotted rule instead of changing the fret number itself. */
 .tab-fret-cell.drop-thumb {
   text-decoration: underline dotted var(--ember-dark);
+}
+
+/* Bar divider: a vertical rule before the first note of each bar (other
+   than the first bar in a line), applied consistently across the duration
+   markers, fret cells, and lyric row so it reads as one continuous line. */
+.bar-break {
+  margin-left: 0.5rem;
+  padding-left: 0.4rem;
+  border-left: 2px solid var(--wood-plank);
 }
 
 /* Inline fret-entry input (editable mode): replaces a fret cell in place

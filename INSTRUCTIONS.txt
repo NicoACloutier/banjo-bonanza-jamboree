@@ -1,0 +1,171 @@
+================================================================================
+                           BANJO TABS - HOW TO RUN
+================================================================================
+
+This project consists of two parts:
+  1. Backend:  FastAPI (Python) REST API + SQLite/PostgreSQL
+  2. Frontend: React + TypeScript (Vite) single-page application
+
+--------------------------------------------------------------------------------
+PREREQUISITES
+--------------------------------------------------------------------------------
+- Python 3.10+ (and pip)
+- Node.js 18+ (and npm)
+- (Optional) PostgreSQL (only if not using default SQLite)
+
+
+--------------------------------------------------------------------------------
+QUICK START SUMMARY
+--------------------------------------------------------------------------------
+
+Backend:
+  cd backend
+  python3 -m venv venv
+  source venv/bin/activate       # (On Windows: .\venv\Scripts\activate)
+  pip install -r requirements.txt
+  cp .env.example .env          # (On Windows: copy .env.example .env)
+  uvicorn app.main:app --reload --port 8000
+
+Frontend:
+  cd frontend
+  npm install
+  cp .env.example .env          # (On Windows: copy .env.example .env)
+  npm run dev
+
+
+================================================================================
+DETAILED STEP-BY-STEP INSTRUCTIONS
+================================================================================
+
+--------------------------------------------------------------------------------
+1. BACKEND SETUP & RUNNING
+--------------------------------------------------------------------------------
+
+1.1. Open a terminal and navigate to the backend directory:
+     cd backend
+
+1.2. Create and activate a Python virtual environment:
+     - On Linux / macOS:
+         python3 -m venv venv
+         source venv/bin/activate
+
+     - On Windows (Command Prompt / PowerShell):
+         python -m venv venv
+         .\venv\Scripts\activate
+
+1.3. Install required Python packages:
+     pip install -r requirements.txt
+
+1.4. Configure Environment Variables:
+     Copy the template file to `.env`:
+       - Linux / macOS: cp .env.example .env
+       - Windows:       copy .env.example .env
+
+     Edit `backend/.env` with your settings. A minimal development setup:
+       ENVIRONMENT=development
+       DEBUG=true
+       DATABASE_URL=sqlite+aiosqlite:///./banjo_tabs.db
+       JWT_SECRET_KEY=generate_a_random_32_byte_hex_or_string_here
+       JWT_ALGORITHM=HS256
+       ACCESS_TOKEN_EXPIRE_MINUTES=60
+       REFRESH_TOKEN_EXPIRE_DAYS=30
+       GOOGLE_CLIENT_ID=
+       GOOGLE_CLIENT_SECRET=
+       GOOGLE_REDIRECT_URI=http://localhost:5173/auth/google/callback
+       CORS_ORIGINS=http://localhost:5173
+       APP_NAME=Banjo Tabs
+
+     Note:
+     - With `ENVIRONMENT=development` and SQLite, database tables are
+       automatically created on startup.
+     - If using PostgreSQL, set `DATABASE_URL` to:
+       postgresql+asyncpg://<user>:<password>@<host>:5432/<db_name>
+       and run migrations:
+         alembic upgrade head
+
+1.5. Start the FastAPI development server:
+     uvicorn app.main:app --reload --port 8000
+
+     The backend will start at: http://localhost:8000
+
+
+--------------------------------------------------------------------------------
+2. FRONTEND SETUP & RUNNING
+--------------------------------------------------------------------------------
+
+2.1. Open a second terminal and navigate to the frontend directory:
+     cd frontend
+
+2.2. Install Node dependencies:
+     npm install
+
+2.3. Configure Environment Variables:
+     Copy the template file to `.env`:
+       - Linux / macOS: cp .env.example .env
+       - Windows:       copy .env.example .env
+
+     Edit `frontend/.env` to include:
+       VITE_API_BASE_URL=http://localhost:8000
+       VITE_GOOGLE_CLIENT_ID=
+       VITE_GOOGLE_REDIRECT_URI=http://localhost:5173/auth/google/callback
+
+2.4. Start the Vite development server:
+     npm run dev
+
+     The frontend will start at: http://localhost:5173 (or next available port).
+
+
+================================================================================
+ACCESSING THE APPLICATION
+================================================================================
+
+- Frontend Web App:       http://localhost:5173
+- Backend API Docs (UI):  http://localhost:8000/docs
+- Backend ReDoc:          http://localhost:8000/redoc
+- API Health Check:       http://localhost:8000/api/health
+
+
+================================================================================
+RUNNING TESTS & CODE QUALITY CHECKS
+================================================================================
+
+Backend Tests:
+  1. Make sure your virtual environment is active in `backend/`.
+  2. Run pytest:
+       pytest
+     or:
+       python -m pytest
+
+Frontend Checks:
+  1. From `frontend/`:
+     - Run unit / component tests:
+         npm run test -- --run
+     - Run tests in watch mode:
+         npm run test
+     - Run linter:
+         npm run lint
+     - Run TypeScript check & build:
+         npm run build
+
+
+================================================================================
+TROUBLESHOOTING & FAQ
+================================================================================
+
+Q: Backend fails with JWT_SECRET_KEY missing error?
+A: Ensure `JWT_SECRET_KEY` is set in `backend/.env`. You can generate a random
+   key using Python:
+     python3 -c "import secrets; print(secrets.token_hex(32))"
+
+Q: Frontend cannot connect to backend?
+A: 1. Verify the backend is running on port 8000.
+   2. Ensure `VITE_API_BASE_URL=http://localhost:8000` is set in `frontend/.env`.
+   3. Ensure `CORS_ORIGINS=http://localhost:5173` is set in `backend/.env`.
+
+Q: How do Google OAuth logins work?
+A: Google OAuth is optional. If you want Google login support:
+   1. Create an OAuth 2.0 Web Application in Google Cloud Console.
+   2. Add `http://localhost:5173/auth/google/callback` to Authorized Redirect URIs.
+   3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `backend/.env`.
+   4. Set `VITE_GOOGLE_CLIENT_ID` in `frontend/.env`.
+   If left blank, regular username/password authentication works out of the box.

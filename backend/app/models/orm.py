@@ -81,6 +81,10 @@ class Tab(Base):
     # every string by this many frets, independent of the "transpose to
     # hear a different tuning" playback control.
     capo_fret: Mapped[int] = mapped_column(Integer, default=0)
+    # How many bars each rendered line of 16 notes is visually divided into
+    # (1, 2, or 4) -- purely a display/layout preference, saved per-tab so it
+    # renders identically in both the editor and the read-only view.
+    bars_per_line: Mapped[int] = mapped_column(Integer, default=4)
 
     status: Mapped[TabStatus] = mapped_column(
         Enum(TabStatus, native_enum=False), default=TabStatus.draft, index=True

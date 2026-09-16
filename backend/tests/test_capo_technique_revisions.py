@@ -77,6 +77,58 @@ async def test_capo_fret_out_of_range_rejected(client):
 
 
 # ---------------------------------------------------------------------------
+# Bars per line
+# ---------------------------------------------------------------------------
+
+
+async def test_bars_per_line_round_trips(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Bars Test",
+            "tuning_key": "standard_g",
+            "bars_per_line": 2,
+            "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 0}]}],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["bars_per_line"] == 2
+
+    fetched = await client.get(f"/api/tabs/{body['id']}")
+    assert fetched.json()["bars_per_line"] == 2
+
+
+async def test_bars_per_line_defaults_to_four(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Default Bars",
+            "tuning_key": "standard_g",
+            "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 0}]}],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["bars_per_line"] == 4
+
+
+async def test_bars_per_line_rejects_invalid_values(client):
+    resp = await client.post(
+        "/api/tabs",
+        json={
+            "song_name": "Bad Bars",
+            "tuning_key": "standard_g",
+            "bars_per_line": 3,
+            "notes": [],
+            "publish": True,
+        },
+    )
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # Bend / drop-thumb techniques
 # ---------------------------------------------------------------------------
 

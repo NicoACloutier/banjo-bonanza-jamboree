@@ -12,7 +12,7 @@ export function Navbar() {
   return (
     <header className="navbar">
       <Link to="/" className="brand" style={{ textDecoration: "none" }}>
-        🪕 Banjo Tabs
+        🪕 Banjo Bonanza Jamboree (the Website)
       </Link>
       <nav>
         <Link to="/">Browse</Link>
