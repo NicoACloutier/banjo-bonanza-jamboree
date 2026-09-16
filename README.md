@@ -1,7 +1,7 @@
 # Banjo Bonanza Jamboree
 
 A full-stack web app for creating, browsing, and playing back 5-string banjo
-tablature -- built with an old-timey, "log cabin" aesthetic.
+tablature, with an added tuner.
 
 ## Features
 
@@ -10,15 +10,13 @@ tablature -- built with an old-timey, "log cabin" aesthetic.
   render below each line of tab.
 - **Automatic playback**: a Web Audio API plucked-string (Karplus-Strong)
   synth plays the tab back note-by-note, with adjustable tempo and
-  transposition (e.g. "standard G, tuned down 1 fret").
+  transposition.
 - **Auto-scroll**: adjustable-speed auto-scroll while playing, like a
   teleprompter.
-- **Drafts + publishing**: logged-in users can save drafts and publish later.
-  Anonymous visitors can create tabs too, but they're published immediately
-  under the username "Anonymous" (no drafts, no voting).
-- **Voting**: thumbs-up only (no downvotes), one vote per user per tab.
+- **Voting**: users can vote on their preferred tabs.
 - **Search**: search published tabs by song name, sorted by vote count.
-- **User profiles**: browse a specific user's published tabs.
+- **User profiles**: browse a specific user's published tabs. Login not
+  necessary to use software or create a tab.
 - **Tuner**: microphone-based pitch detection (autocorrelation), compared
   against the selected tuning (with optional transposition), with a simple
   sharp/flat meter.
@@ -100,27 +98,3 @@ Run tests / type-check / build:
 npm run test -- --run
 npm run build
 ```
-
-## Deployment notes (AWS free tier)
-
-This app is designed to fit comfortably on AWS free-tier resources:
-
-- **Backend**: an EC2 `t2.micro`/`t3.micro` instance running the FastAPI app
-  behind `uvicorn`/`gunicorn` (or a small container).
-- **Database**: an RDS PostgreSQL `db.t3.micro` (free-tier eligible) instance.
-- **Frontend**: a static build (`npm run build`) served from S3 + CloudFront,
-  or from the same EC2 instance.
-
-All configuration is environment-driven (see `backend/.env.example` and
-`frontend/.env.example`) -- no secrets or hostnames are hard-coded anywhere
-in the source.
-
-## Security notes
-
-- Passwords are hashed with Argon2id (OWASP's current recommendation), never
-  stored in plaintext.
-- Refresh tokens are stored server-side only as SHA-256 hashes and rotate on
-  each use.
-- Access tokens are short-lived signed JWTs.
-- Google OAuth2 uses the standard authorization-code flow; client secrets
-  never touch the frontend.
