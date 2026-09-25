@@ -70,24 +70,36 @@ const FINGER_ABBR: Record<NonNullable<NoteFretOut["right_hand_finger"]>, string>
   middle: "M",
 };
 
-/** Render a single fret's cell text, e.g. "2", "h2", "2p0", "2s4", "2b2". */
-function fretCellText(fretEvent: NoteFretOut): string {
-  const suffix = TECHNIQUE_SUFFIX[fretEvent.technique];
-  let text: string;
+/**
+ * The technique/finger annotations written around a fret number, e.g. "h"
+ * before it for "h2", or "s4" after it for "2s4". Shown both in a fret's
+ * static text and around the inline input while its fret is being typed.
+ */
+function fretAffixes(fretEvent: NoteFretOut): { prefix: string; suffix: string } {
+  const label = TECHNIQUE_SUFFIX[fretEvent.technique];
+  let prefix = "";
+  let suffix: string;
   if (fretEvent.technique === "slide" && fretEvent.slide_to_fret !== null) {
-    text = `${fretEvent.fret}${suffix}${fretEvent.slide_to_fret}`;
+    suffix = `${label}${fretEvent.slide_to_fret}`;
   } else if (fretEvent.technique === "bend" && fretEvent.bend_semitones !== null) {
-    text = `${fretEvent.fret}${suffix}${fretEvent.bend_semitones}`;
+    suffix = `${label}${fretEvent.bend_semitones}`;
   } else if (fretEvent.technique === "hammer_on" || fretEvent.technique === "pull_off") {
-    text = `${suffix}${fretEvent.fret}`;
+    prefix = label;
+    suffix = "";
   } else {
-    // "normal" has an empty suffix; "drop_thumb" appends its "d" label here.
-    text = `${fretEvent.fret}${suffix}`;
+    // "normal" has an empty label; "drop_thumb" appends its "d" here.
+    suffix = label;
   }
   if (fretEvent.right_hand_finger) {
-    text += FINGER_ABBR[fretEvent.right_hand_finger];
+    suffix += FINGER_ABBR[fretEvent.right_hand_finger];
   }
-  return text;
+  return { prefix, suffix };
+}
+
+/** Render a single fret's cell text, e.g. "2", "h2", "2p0", "2s4", "2b2". */
+function fretCellText(fretEvent: NoteFretOut): string {
+  const { prefix, suffix } = fretAffixes(fretEvent);
+  return `${prefix}${fretEvent.fret}${suffix}`;
 }
 
 interface TabRendererProps {
@@ -202,34 +214,49 @@ export function TabRenderer({
                     editingCell?.noteId === note.id && editingCell?.stringNumber === stringNumber;
 
                   if (isEditingThisCell) {
+                    // Keep showing the technique (e.g. the "h" of "h2") while
+                    // the fret is typed, so a technique shortcut shows up at once.
+                    const affixes = fretOnThisString ? fretAffixes(fretOnThisString) : { prefix: "", suffix: "" };
                     return (
-                      <input
+                      <span
                         key={note.id}
-                        className={["tab-fret-cell", "tab-fret-cell-input", barBreak ? "bar-break" : ""]
-                          .filter(Boolean)
-                          .join(" ")}
-                        type="text"
-                        inputMode="numeric"
-                        ref={(el) => el?.focus({ preventScroll: true })}
-                        value={editingValue}
-                        aria-label={`Fret for string ${stringNumber}`}
-                        onChange={(e) => setEditingValue(e.target.value.replace(/[^0-9]/g, ""))}
-                        onBlur={commitEditingCell}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            commitEditingCell();
-                          } else if (e.key === "Escape") {
-                            e.preventDefault();
-                            if (editingCell?.wasBlank) {
-                              // Undo the fret-0 placeholder committed when this cell was opened.
-                              onFretChange?.(editingCell.noteId, editingCell.stringNumber, null);
+                        className={["tab-fret-cell", "editing", barBreak ? "bar-break" : ""].filter(Boolean).join(" ")}
+                      >
+                        {affixes.prefix}
+                        <input
+                          className="tab-fret-cell-input"
+                          type="text"
+                          inputMode="numeric"
+                          ref={(el) => {
+                            // Focus (and select, so typing replaces the fret
+                            // rather than appending to it) only when the input
+                            // first opens -- this runs on every render.
+                            if (el && document.activeElement !== el) {
+                              el.focus({ preventScroll: true });
+                              el.select();
                             }
-                            setEditingCell(null);
-                            setEditingValue("");
-                          }
-                        }}
-                      />
+                          }}
+                          value={editingValue}
+                          aria-label={`Fret for string ${stringNumber}`}
+                          onChange={(e) => setEditingValue(e.target.value.replace(/[^0-9]/g, ""))}
+                          onBlur={commitEditingCell}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              commitEditingCell();
+                            } else if (e.key === "Escape") {
+                              e.preventDefault();
+                              if (editingCell?.wasBlank) {
+                                // Undo the fret-0 placeholder committed when this cell was opened.
+                                onFretChange?.(editingCell.noteId, editingCell.stringNumber, null);
+                              }
+                              setEditingCell(null);
+                              setEditingValue("");
+                            }
+                          }}
+                        />
+                        {affixes.suffix}
+                      </span>
                     );
                   }
 

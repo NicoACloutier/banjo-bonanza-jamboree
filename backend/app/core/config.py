@@ -13,6 +13,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load `backend/.env` if present. Real environment variables take precedence.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
 def _split_csv(value: str) -> list[str]:

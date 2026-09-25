@@ -1,10 +1,25 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TabEditor, createEmptyNote, type TabMetadata } from "../components/TabEditor";
 import { FALLBACK_TUNINGS } from "../lib/tunings";
 import type { NoteOut } from "../types/api";
+
+// No Web Audio in the test environment: stand in for the playback engine.
+const enginePlay = vi.fn();
+const engineStop = vi.fn();
+vi.mock("../lib/playbackEngine", () => ({
+  TabPlaybackEngine: class {
+    play = enginePlay;
+    stop = engineStop;
+    dispose = vi.fn();
+  },
+}));
+beforeEach(() => {
+  enginePlay.mockClear();
+  engineStop.mockClear();
+});
 
 function Harness({ initialNotes = [] as NoteOut[] }: { initialNotes?: NoteOut[] }) {
   const [metadata, setMetadata] = useState<TabMetadata>({
@@ -375,5 +390,101 @@ describe("TabEditor", () => {
     // Only the 17th note (now renumbered as note 1, alone on line 1) should remain.
     const lineDropdown = screen.getByLabelText("Range start (line)");
     expect(within(lineDropdown).getAllByRole("option")).toHaveLength(1);
+  });
+
+  it("toggles a clawhammer thumb pluck with T or the panel, shown as (0) on the 5th string", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0), createEmptyNote(1)]} />);
+    await typeFret(user, container, 3, 0, "2");
+    const fifthStringCells = () =>
+      Array.from(container.querySelectorAll(".tab-string-row")[4].querySelectorAll(".tab-fret-cell")).map(
+        (c) => c.textContent,
+      );
+
+    // T does nothing until clawhammer mode is on.
+    await user.keyboard("t");
+    expect(fifthStringCells()).toEqual(["-", "-"]);
+
+    await user.click(screen.getByLabelText(/clawhammer mode/i));
+    await user.keyboard("t");
+    expect(fifthStringCells()).toEqual(["(0)", "-"]);
+
+    await user.click(screen.getByLabelText(/then pluck the 5th string/i));
+    expect(fifthStringCells()).toEqual(["-", "-"]);
+  });
+
+  it("shows a thumb pluck after a note that also plays the 5th string as e.g. '2 (0)'", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+    await user.click(screen.getByLabelText(/clawhammer mode/i));
+    await typeFret(user, container, 5, 0, "2");
+    await user.keyboard("t");
+    const cell = container.querySelectorAll(".tab-string-row")[4].querySelector(".tab-fret-cell");
+    expect(cell).toHaveTextContent("2 (0)");
+  });
+
+  it("T works on a blank note (a thumb pluck can follow a rest)", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+    await user.click(screen.getByLabelText(/clawhammer mode/i));
+    await user.click(container.querySelector(".duration-marker") as HTMLElement); // selects the note
+    await user.keyboard("t");
+    expect(container.querySelectorAll(".thumb-pluck")).toHaveLength(1);
+  });
+
+  it("plays the tab, or from the selected note, with the tab's settings", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0), createEmptyNote(1)]} />);
+    await user.click(screen.getByRole("button", { name: /^▶ play$/i }));
+    expect(enginePlay).toHaveBeenCalledTimes(1);
+    const [playedNotes, tuning, tempo, transpose, options] = enginePlay.mock.calls[0];
+    expect(playedNotes).toHaveLength(2);
+    expect(tuning.key).toBe(FALLBACK_TUNINGS[0].key);
+    expect([tempo, transpose]).toEqual([100, 0]);
+    expect(options).toEqual({ capoFret: 0, clawhammerTiming: false });
+
+    await user.click(screen.getByRole("button", { name: /stop/i }));
+    expect(engineStop).toHaveBeenCalled();
+
+    await typeFret(user, container, 1, 1, "3"); // selects the second note
+    await user.click(screen.getByRole("button", { name: /play from selected note/i }));
+    expect(enginePlay.mock.calls[1][0]).toHaveLength(1);
+  });
+
+  it("typing into a cell that already has a fret replaces it instead of appending", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+    await typeFret(user, container, 3, 0, "2");
+
+    const cell = container.querySelectorAll(".tab-string-row")[2].querySelector(".tab-fret-cell.clickable")!;
+    await user.click(cell);
+    await user.keyboard("5{Enter}");
+    expect(container.querySelectorAll(".tab-string-row")[2].querySelector(".tab-fret-cell")).toHaveTextContent("5");
+  });
+
+  it("shows a technique set with its shortcut while the fret is still being typed", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} />);
+    const cell = container.querySelectorAll(".tab-string-row")[2].querySelector(".tab-fret-cell.clickable")!;
+    await user.click(cell);
+    await user.keyboard("2h");
+
+    const input = screen.getByLabelText("Fret for string 3");
+    expect(input).toHaveValue("2");
+    expect(input.closest(".tab-fret-cell")).toHaveTextContent(/^h$/); // "h" shown beside the input
+
+    await user.keyboard("{Enter}");
+    expect(container.querySelectorAll(".tab-string-row")[2].querySelector(".tab-fret-cell")).toHaveTextContent("h2");
+  });
+
+  it("plays with the chosen transposition", async () => {
+    const user = userEvent.setup();
+    render(<Harness initialNotes={[createEmptyNote(0)]} />);
+    const slider = screen.getByLabelText(/transpose playback/i);
+    // Range inputs can't be typed into; set the value like a drag would.
+    fireEvent.change(slider, { target: { value: "2" } });
+    expect(screen.getByText(/transpose: \+2 frets/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^▶ play$/i }));
+    expect(enginePlay.mock.calls[0][3]).toBe(2);
   });
 });

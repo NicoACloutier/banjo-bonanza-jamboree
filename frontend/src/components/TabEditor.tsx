@@ -15,8 +15,9 @@
  * also be applied with a single keystroke (see `TECHNIQUE_SHORTCUTS`)
  * while a note with at least one fret is selected.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TabRenderer } from "./TabRenderer";
+import { TabPlaybackEngine } from "../lib/playbackEngine";
 import type { NoteFretIn, NoteOut, RightHandFinger, Technique, TuningOut } from "../types/api";
 
 export interface TabMetadata {
@@ -198,6 +199,41 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
 
   const selectedNote = useMemo(() => notes.find((n) => n.id === selectedNoteId) ?? null, [notes, selectedNoteId]);
 
+  // Playback of the tab being edited, at its tempo/tuning/capo. Transpose
+  // is a listening preview only; it isn't saved with the tab.
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [transposeSemitones, setTransposeSemitones] = useState(0);
+  const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
+  const engineRef = useRef<TabPlaybackEngine | null>(null);
+  useEffect(() => {
+    const engine = new TabPlaybackEngine({
+      onProgress: (noteId) => setPlayingNoteId(noteId),
+      onEnded: () => {
+        setIsPlaying(false);
+        setPlayingNoteId(null);
+      },
+    });
+    engineRef.current = engine;
+    return () => engine.dispose();
+  }, []);
+
+  const play = (fromNote: NoteOut | null) => {
+    const tuning = tunings.find((t) => t.key === metadata.tuningKey) ?? tunings[0];
+    if (!tuning) return;
+    const playNotes = fromNote ? notes.filter((n) => n.position >= fromNote.position) : notes;
+    engineRef.current?.play(playNotes, tuning, metadata.tempoBpm, transposeSemitones, {
+      capoFret: metadata.capoFret,
+      clawhammerTiming: metadata.clawhammerTiming,
+    });
+    setIsPlaying(true);
+  };
+
+  const stop = () => {
+    engineRef.current?.stop();
+    setIsPlaying(false);
+    setPlayingNoteId(null);
+  };
+
   const totalLines = Math.max(1, Math.ceil(notes.length / NOTES_PER_LINE));
   const notesInLine = (lineIdx: number) =>
     Math.min(NOTES_PER_LINE, Math.max(0, notes.length - lineIdx * NOTES_PER_LINE));
@@ -237,6 +273,29 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedNote, notes, onNotesChange]);
+
+  // "T" toggles the selected note's clawhammer thumb pluck. Unlike the
+  // technique shortcuts this works on blank notes too (a thumb pluck can
+  // follow a rest). Ignored while typing in a text field (except the
+  // digits-only fret input, as above); checkboxes don't count, so T works
+  // right after ticking "Clawhammer mode".
+  useEffect(() => {
+    if (!selectedNote || !metadata.clawhammerTiming) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== "t") return;
+      const target = e.target as HTMLElement | null;
+      const isFretInput = target?.classList.contains("tab-fret-cell-input");
+      const isCheckbox = target instanceof HTMLInputElement && target.type === "checkbox";
+      const isTextField = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT";
+      if (isTextField && !isFretInput && !isCheckbox) return;
+      e.preventDefault();
+      onNotesChange(
+        notes.map((n) => (n.id === selectedNote.id ? { ...n, thumb_after: !n.thumb_after } : n)),
+      );
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedNote, metadata.clawhammerTiming, notes, onNotesChange]);
 
   /** Reset the selected note back to blank (all "-") without removing its slot from the tab. */
   const clearSelectedNote = () => {
@@ -405,7 +464,54 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
         </label>
       </div>
 
+      <label className="checkbox-label">
+        <input
+          type="checkbox"
+          checked={metadata.clawhammerTiming}
+          onChange={(e) => onMetadataChange({ ...metadata, clawhammerTiming: e.target.checked })}
+        />
+        Clawhammer mode
+      </label>
+      {metadata.clawhammerTiming && (
+        <p className="muted-text">
+          Select a note and press <kbd>T</kbd> to pluck the open 5th string after it, on the off-beat. It
+          shows as <strong>(0)</strong> on the 5th string.
+        </p>
+      )}
+
       <h3>Tab preview</h3>
+      <div className="toolbar" role="group" aria-label="Playback">
+        {isPlaying ? (
+          <button type="button" onClick={stop}>
+            ⏹ Stop
+          </button>
+        ) : (
+          <>
+            <button type="button" onClick={() => play(null)}>
+              ▶ Play
+            </button>
+            {selectedNote && (
+              <button type="button" className="secondary" onClick={() => play(selectedNote)}>
+                ▶ Play from selected note
+              </button>
+            )}
+          </>
+        )}
+        <label>
+          Transpose: {transposeSemitones > 0 ? `+${transposeSemitones}` : transposeSemitones} fret
+          {Math.abs(transposeSemitones) === 1 ? "" : "s"}
+          <input
+            type="range"
+            min={-12}
+            max={12}
+            value={transposeSemitones}
+            disabled={isPlaying}
+            title={isPlaying ? "Stop playback to change the transposition" : undefined}
+            onChange={(e) => setTransposeSemitones(Number(e.target.value))}
+            aria-label="Transpose playback in semitones"
+          />
+        </label>
+      </div>
       <p className="muted-text">
         Click a string's cell to type its fret number directly (leave it blank/backspace it to clear that
         string back to "-"). Type lyrics straight into the box below each note.
@@ -415,7 +521,9 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
           <TabRenderer
             notes={notes}
             barsPerLine={metadata.barsPerLine}
+            clawhammerTiming={metadata.clawhammerTiming}
             selectedNoteId={selectedNoteId}
+            playingNoteId={playingNoteId}
             onNoteClick={(note) => setSelectedNoteId(note.id)}
             onFretChange={handleFretChange}
             onLyricChange={handleLyricChange}
@@ -464,6 +572,16 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
                       />
                     ))}
                 </>
+              )}
+              {metadata.clawhammerTiming && (
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selectedNote.thumb_after}
+                    onChange={(e) => updateSelectedNote({ thumb_after: e.target.checked })}
+                  />
+                  Then pluck the 5th string (T)
+                </label>
               )}
               <div className="form-row">
                 <button className="secondary" onClick={clearSelectedNote}>

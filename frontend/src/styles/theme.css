@@ -313,19 +313,26 @@ label select {
   border-left: 2px solid var(--wood-plank);
 }
 
-/* Inline fret-entry input (editable mode): replaces a fret cell in place
-   while the user is typing a fret number for that string/note. */
-.tab-fret-cell-input {
-  width: 2.6rem;
-  height: 1.5rem;
-  margin-right: 0.15rem;
+/* Inline fret-entry input (editable mode): replaces a fret's text in place
+   while the user is typing a fret number for that string/note. The cell
+   keeps showing the technique around it (e.g. the "h" of "h2").
+   (`.tab-sheet input` outranks the site-wide text-input style.) */
+.tab-sheet input.tab-fret-cell-input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 1.3rem;
   padding: 0;
   text-align: center;
+  font-family: inherit;
   font-weight: bold;
   font-size: 0.85rem;
   border: 1px solid var(--ember-dark);
   border-radius: 3px;
   background-color: var(--parchment-dark);
+}
+
+.tab-fret-cell.editing {
+  gap: 0.05rem;
 }
 
 /* Unobtrusive note-duration marker row (editable mode only): tiny text
@@ -335,12 +342,13 @@ label select {
   display: flex;
   white-space: nowrap;
   line-height: 0.9rem;
-  margin-left: 1.5rem;
+  margin-left: var(--tab-label-width);
 }
 
 .duration-marker {
-  width: 2.6rem;
-  margin-right: 0.15rem;
+  flex: 0 0 auto;
+  width: var(--tab-cell-width);
+  margin-right: var(--tab-cell-gap);
   padding: 0;
   border: none;
   background: none;
@@ -362,6 +370,18 @@ label select {
 .tab-fret-cell.with-thumb-pluck {
   letter-spacing: -0.06em;
   white-space: nowrap;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.checkbox-label input {
+  width: auto;
+  margin: 0;
 }
 
 .duration-marker:hover {
@@ -438,12 +458,10 @@ label select {
 
 /* Inline lyric input (editable mode): a borderless text box directly
    below its note, so lyrics can be typed in place under the tab. */
-.lyric-token-input {
-  display: inline-block;
-  width: 2.6rem;
-  margin-right: 0.15rem;
+.tab-sheet input.lyric-token-input {
   padding: 0;
   border: none;
+  border-radius: 0;
   border-bottom: 1px dashed var(--wood-plank);
   background: none;
   color: var(--ember-dark);
@@ -452,7 +470,7 @@ label select {
   font-size: 0.85rem;
 }
 
-.lyric-token-input:focus {
+.tab-sheet input.lyric-token-input:focus {
   border-bottom: 1px solid var(--ember-dark);
   outline: none;
 }
