@@ -54,14 +54,44 @@ TUNINGS: dict[str, TuningDefinition] = {
         TuningDefinition(
             key="double_d",
             display_name="Double D",
-            open_strings=("D4", "A3", "D3", "D3", "A4"),
-            description="aDADE-family double D tuning.",
+            open_strings=("E4", "D4", "A3", "D3", "A4"),
+            description="aDADE -- Double C raised a whole step; popular for old-time tunes in D.",
         ),
         TuningDefinition(
             key="drop_c",
             display_name="Drop C",
             open_strings=("D4", "B3", "G3", "C3", "G4"),
             description="gCGBD -- Open G with the 4th string dropped to C.",
+        ),
+        TuningDefinition(
+            key="open_c",
+            display_name="Open C",
+            open_strings=("E4", "C4", "G3", "C3", "G4"),
+            description="gCGCE -- Double C with the 1st string lowered to E; rings an open C major chord.",
+        ),
+        TuningDefinition(
+            key="g_minor",
+            display_name="G Minor",
+            open_strings=("D4", "Bb3", "G3", "D3", "G4"),
+            description="gDGBbD -- Open G with the 2nd string lowered to Bb; for minor-key tunes.",
+        ),
+        TuningDefinition(
+            key="d_minor",
+            display_name="D Minor",
+            open_strings=("D4", "A3", "F3", "D3", "A4"),
+            description="aDFAD -- open D minor chord; for minor-key tunes in D.",
+        ),
+        TuningDefinition(
+            key="open_a",
+            display_name="Open A",
+            open_strings=("E4", "C#4", "A3", "E3", "A4"),
+            description="aEAC#E -- Open G raised a whole step; common in old-time and bluegrass fiddle keys.",
+        ),
+        TuningDefinition(
+            key="a_modal",
+            display_name="A Modal (Sawmill in A)",
+            open_strings=("E4", "D4", "A3", "E3", "A4"),
+            description="aEADE -- Sawmill raised a whole step; used for modal fiddle tunes in A.",
         ),
     ]
 }

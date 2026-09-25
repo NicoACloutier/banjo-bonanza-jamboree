@@ -199,6 +199,14 @@ label select {
   flex: 1 1 200px;
 }
 
+.reference-notes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
 .error-banner {
   background: #f6d0c0;
   border: 2px solid var(--ember-dark);
@@ -497,9 +505,33 @@ label select {
   margin-left: 0.4rem;
 }
 
+.tuner-layout {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.tuner-string-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+/* The currently selected string: primary colour, pressed in. */
+.tuner-string-picker button.selected {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--wood-dark), inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.tuner-readout {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .tuner-meter {
   width: 100%;
-  height: 2rem;
+  height: 3rem;
   background: #fffaf0;
   border: 2px solid var(--wood-plank);
   border-radius: 4px;
@@ -517,11 +549,61 @@ label select {
   left: 50%;
   transform: translateX(-50%);
   transition: left 0.08s linear;
+  z-index: 1;
+}
+
+/* Reading is beyond the meter's range: pinned to the edge, drawn hollow. */
+.tuner-needle.off-scale {
+  background: transparent;
+  border: 2px dashed var(--ember-dark);
+  width: 6px;
+}
+
+.tuner-in-tune-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(120, 160, 80, 0.35);
+}
+
+.tuner-tick {
+  position: absolute;
+  bottom: 0;
+  height: 30%;
+  width: 1px;
+  background: var(--wood-plank);
+  transform: translateX(-50%);
+}
+
+.tuner-tick.major {
+  height: 55%;
+}
+
+.tuner-scale-labels {
+  position: relative;
+  height: 1.2rem;
+  margin: -0.75rem 0 1rem;
+  font-size: 0.75rem;
+  color: var(--wood-plank);
+}
+
+.tuner-scale-labels span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.tuner-scale-labels span:first-child {
+  transform: none;
+}
+
+.tuner-scale-labels span:last-child {
+  transform: translateX(-100%);
 }
 
 .tuner-center-line {
   position: absolute;
   left: 50%;
+  transform: translateX(-50%);
   top: 0;
   bottom: 0;
   width: 2px;
