@@ -15,6 +15,7 @@ function Harness({ initialNotes = [] as NoteOut[] }: { initialNotes?: NoteOut[] 
     tempoBpm: 100,
     capoFret: 0,
     barsPerLine: 4,
+    clawhammerTiming: false,
   });
   const [notes, setNotes] = useState<NoteOut[]>(initialNotes);
   return (

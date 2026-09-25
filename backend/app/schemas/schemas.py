@@ -108,6 +108,9 @@ class NoteIn(msgspec.Struct):
     # A rest: no sound, no fret numbers shown -- just extra time/space before
     # the next note. `frets` must be empty for a rest.
     is_rest: bool = False
+    # Clawhammer mode only: pluck the open 5th string halfway through this
+    # note (on the off-beat), without taking extra time.
+    thumb_after: bool = False
     # One entry per string sounded at this position; more than one entry
     # means a chord (multiple strings struck simultaneously). Must contain
     # exactly one entry per distinct string_number (1-5), and must be empty
@@ -122,6 +125,7 @@ class NoteOut(msgspec.Struct):
     line_break: bool
     lyric: str | None = None
     is_rest: bool = False
+    thumb_after: bool = False
     frets: list[NoteFretOut] = msgspec.field(default_factory=list)
 
 
@@ -140,6 +144,8 @@ class TabCreateRequest(msgspec.Struct):
     capo_fret: int = 0
     # How many bars each 16-note line is visually divided into (1, 2, or 4).
     bars_per_line: int = 4
+    # Clawhammer mode: enables notes' `thumb_after` 5th-string plucks.
+    clawhammer_timing: bool = False
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
 
@@ -152,6 +158,7 @@ class TabUpdateRequest(msgspec.Struct):
     tempo_bpm: int = 100
     capo_fret: int = 0
     bars_per_line: int = 4
+    clawhammer_timing: bool = False
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
 
@@ -182,6 +189,7 @@ class TabDetail(msgspec.Struct):
     tempo_bpm: int
     capo_fret: int
     bars_per_line: int
+    clawhammer_timing: bool
     status: TabStatusOut
     vote_count: int
     owner_id: str
@@ -243,4 +251,5 @@ class TabRevisionDetail(msgspec.Struct):
     tempo_bpm: int
     capo_fret: int
     bars_per_line: int
+    clawhammer_timing: bool
     notes: list[NoteOut]

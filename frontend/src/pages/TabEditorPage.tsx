@@ -19,6 +19,7 @@ function notesToNoteIn(notes: NoteOut[]): NoteIn[] {
     line_break: n.line_break,
     lyric: n.lyric,
     is_rest: n.is_rest,
+    thumb_after: n.thumb_after,
     frets: n.frets.map((f) => ({
       string_number: f.string_number,
       fret: f.fret,
@@ -45,6 +46,7 @@ export function TabEditorPage() {
     tempoBpm: 100,
     capoFret: 0,
     barsPerLine: 4,
+    clawhammerTiming: false,
   });
   const [notes, setNotes] = useState<NoteOut[]>(() =>
     // New tabs start with 10 empty (rest) note slots the user can click to
@@ -75,6 +77,7 @@ export function TabEditorPage() {
           tempoBpm: tab.tempo_bpm,
           capoFret: tab.capo_fret,
           barsPerLine: tab.bars_per_line,
+          clawhammerTiming: tab.clawhammer_timing,
         });
         setNotes(tab.notes);
       })
@@ -103,6 +106,7 @@ export function TabEditorPage() {
           tempo_bpm: metadata.tempoBpm,
           capo_fret: metadata.capoFret,
           bars_per_line: metadata.barsPerLine,
+          clawhammer_timing: metadata.clawhammerTiming,
           notes: notesToNoteIn(notes),
           publish,
         };

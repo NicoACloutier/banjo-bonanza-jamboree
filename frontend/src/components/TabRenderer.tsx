@@ -18,6 +18,10 @@
  * A line of `barsPerLine` bars (1, 2, or 4) draws a vertical divider before
  * every Nth note within the line, purely a visual grouping aid.
  *
+ * With `clawhammerTiming`, a note with `thumb_after` shows "(0)" in its
+ * 5th-string cell (after the fret, e.g. "2 (0)", if the note also plays the
+ * 5th string): the open 5th string plucked on the off-beat after the note.
+ *
  * Also supports an "editable" mode (when `onFretEdit` is supplied), in
  * which:
  *   - clicking a fret cell turns it into a small text input in place, so
@@ -90,6 +94,8 @@ interface TabRendererProps {
   notes: NoteOut[];
   /** How many bars each line of notes is visually divided into (1, 2, or 4); defaults to 1 (no internal dividers). */
   barsPerLine?: number;
+  /** Clawhammer mode: show notes' 5th-string thumb plucks as "(0)". */
+  clawhammerTiming?: boolean;
   playingNoteId?: string | null;
   selectedNoteId?: string | null;
   onNoteClick?: (note: NoteOut) => void;
@@ -117,6 +123,7 @@ interface EditingCell {
 export function TabRenderer({
   notes,
   barsPerLine = 1,
+  clawhammerTiming = false,
   playingNoteId,
   selectedNoteId,
   onNoteClick,
@@ -190,6 +197,7 @@ export function TabRenderer({
                   const isSelected = note.id === selectedNoteId;
                   const isChord = note.frets.length > 1;
                   const barBreak = isBarBreak(noteIndex);
+                  const showThumbPluck = stringNumber === 5 && clawhammerTiming && note.thumb_after;
                   const isEditingThisCell =
                     editingCell?.noteId === note.id && editingCell?.stringNumber === stringNumber;
 
@@ -236,6 +244,7 @@ export function TabRenderer({
                         fretOnThisString && isChord ? "chord-member" : "",
                         fretOnThisString?.technique === "drop_thumb" ? "drop-thumb" : "",
                         barBreak ? "bar-break" : "",
+                        showThumbPluck && fretOnThisString ? "with-thumb-pluck" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -264,7 +273,18 @@ export function TabRenderer({
                           : undefined
                       }
                     >
-                      {fretOnThisString ? fretCellText(fretOnThisString) : "-"}
+                      {showThumbPluck ? (
+                        <>
+                          {fretOnThisString && `${fretCellText(fretOnThisString)} `}
+                          <span className="thumb-pluck" title="Then pluck the open 5th string">
+                            (0)
+                          </span>
+                        </>
+                      ) : fretOnThisString ? (
+                        fretCellText(fretOnThisString)
+                      ) : (
+                        "-"
+                      )}
                     </span>
                   );
                 })}

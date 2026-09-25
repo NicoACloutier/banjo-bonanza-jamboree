@@ -208,6 +208,7 @@ async def _replace_notes(db: AsyncSession, tab: Tab, notes_in) -> None:
             duration_beats=note_in.duration_beats,
             line_break=note_in.line_break,
             is_rest=note_in.is_rest,
+            thumb_after=note_in.thumb_after,
         )
         db.add(note)
         await db.flush()
@@ -244,6 +245,7 @@ async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
         tempo_bpm=tab.tempo_bpm,
         capo_fret=tab.capo_fret,
         bars_per_line=tab.bars_per_line,
+        clawhammer_timing=tab.clawhammer_timing,
         notes=[
             NoteIn(
                 position=n.position,
@@ -251,6 +253,7 @@ async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
                 line_break=n.line_break,
                 lyric=n.lyric.text if n.lyric else None,
                 is_rest=n.is_rest,
+                thumb_after=n.thumb_after,
                 frets=[
                     NoteFretIn(
                         string_number=f.string_number,
@@ -317,6 +320,7 @@ async def create_tab(
         tempo_bpm=max(20, min(400, body.tempo_bpm)),
         capo_fret=body.capo_fret,
         bars_per_line=body.bars_per_line,
+        clawhammer_timing=body.clawhammer_timing,
         status=TabStatus.published if body.publish else TabStatus.draft,
     )
     db.add(tab)
@@ -433,6 +437,7 @@ async def update_tab(
     tab.tempo_bpm = max(20, min(400, body.tempo_bpm))
     tab.capo_fret = body.capo_fret
     tab.bars_per_line = body.bars_per_line
+    tab.clawhammer_timing = body.clawhammer_timing
     tab.status = TabStatus.published if body.publish else TabStatus.draft
     await _replace_notes(db, tab, body.notes)
     await db.commit()
@@ -532,6 +537,7 @@ async def restore_tab_revision(
     tab.tempo_bpm = max(20, min(400, snapshot.tempo_bpm))
     tab.capo_fret = snapshot.capo_fret
     tab.bars_per_line = snapshot.bars_per_line
+    tab.clawhammer_timing = snapshot.clawhammer_timing
     tab.status = TabStatus.published if snapshot.publish else TabStatus.draft
     await _replace_notes(db, tab, snapshot.notes)
     await db.commit()

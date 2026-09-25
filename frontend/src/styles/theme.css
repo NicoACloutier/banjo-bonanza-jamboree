@@ -219,6 +219,11 @@ label select {
 
 /* ---- Tab sheet rendering ---- */
 .tab-sheet {
+  /* Shared by every row of a tab line (duration markers, strings, lyrics)
+     so each note's column lines up exactly. */
+  --tab-label-width: 1.5rem;
+  --tab-cell-width: 2.6rem;
+  --tab-cell-gap: 0.15rem;
   font-family: var(--font-body);
   overflow-x: auto;
 }
@@ -256,19 +261,21 @@ label select {
 }
 
 .tab-string-label {
-  width: 1.5rem;
+  flex: 0 0 var(--tab-label-width);
+  width: var(--tab-label-width);
   color: var(--wood-plank);
   font-weight: bold;
 }
 
 .tab-fret-cell {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 2.6rem;
+  width: var(--tab-cell-width);
   height: 1.5rem;
   border-bottom: 2px solid var(--wood-plank);
-  margin-right: 0.15rem;
+  margin-right: var(--tab-cell-gap);
   font-weight: bold;
   font-size: 0.85rem;
 }
@@ -344,12 +351,30 @@ label select {
   cursor: pointer;
 }
 
+/* Clawhammer thumb pluck after a note, shown as "(0)" on the 5th string. */
+.thumb-pluck {
+  font-size: 0.85em;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+/* A fret plus "(0)" (e.g. "2 (0)") has to fit the same fixed-width cell. */
+.tab-fret-cell.with-thumb-pluck {
+  letter-spacing: -0.06em;
+  white-space: nowrap;
+}
+
 .duration-marker:hover {
   color: var(--ember-dark);
 }
 
+/* Lyrics sit in the same columns as the notes above them (past the string
+   label column), centred under each note like its fret number. */
 .tab-lyrics-row {
+  display: flex;
+  white-space: nowrap;
   margin-top: 0.4rem;
+  margin-left: var(--tab-label-width);
   color: var(--ember-dark);
   font-style: italic;
 }
@@ -395,15 +420,19 @@ label select {
     font-size: 0.75rem;
   }
 
-  .tab-fret-cell {
-    width: 2rem;
+  .tab-sheet {
+    --tab-cell-width: 2rem;
   }
 }
 
 
 .lyric-token {
   display: inline-block;
-  width: 2.25rem;
+  flex: 0 0 auto;
+  width: var(--tab-cell-width);
+  margin-right: var(--tab-cell-gap);
+  text-align: center;
+  font-size: 0.85rem;
   overflow: visible;
 }
 

@@ -16,11 +16,29 @@ export interface SoundEvent {
   slideToFrequency?: number;
   /** Present only for bends: the frequency the pitch bends up to. */
   bendToFrequency?: number;
+  /**
+   * Present only for hammer-ons/pull-offs: the frequency the note is plucked
+   * at before hammering/pulling to `frequency` halfway through.
+   */
+  fromFrequency?: number;
+}
+
+/**
+ * The fret a hammer-on/pull-off to `fret` starts from: the last fret played
+ * on that string, or, with nothing (different) before it, the open string for
+ * a hammer-on and two frets higher for a pull-off.
+ */
+function legatoFromFret(technique: "hammer_on" | "pull_off", fret: number, previousFret: number | undefined): number | null {
+  if (previousFret !== undefined && previousFret !== fret) return previousFret;
+  if (technique === "pull_off") return fret + 2;
+  return fret > 0 ? 0 : null;
 }
 
 export interface TimedNote extends NoteOut {
   /** Seconds from the start of playback that this note should sound. */
   startTimeSeconds: number;
+  /** How long the note sounds for, in seconds. */
+  durationSeconds: number;
   /**
    * All strings sounding simultaneously at this position (a chord has more
    * than one). Always non-empty for entries in the returned schedule
@@ -41,6 +59,15 @@ export interface TimedNote extends NoteOut {
  * physical capo shortens the vibrating string length), independent of
  * `transposeSemitones` (which is purely a playback preview, e.g. "hear
  * this tuning down 1 fret" -- it does not reflect a physical capo).
+ *
+ * Hammer-ons and pull-offs take the same time as a plain note, but are
+ * plucked at the previous fret on that string and change to the written
+ * fret halfway through (see `SoundEvent.fromFrequency`).
+ *
+ * With `clawhammerTiming`, a note with `thumb_after` also gets a clawhammer
+ * thumb stroke: the open 5th string, plucked halfway through the note (on
+ * the off-beat). It takes no extra time. The stroke's entry shares the
+ * note's id, so playback highlighting stays on that note.
  */
 export function computePlaybackSchedule(
   notes: NoteOut[],
@@ -48,12 +75,16 @@ export function computePlaybackSchedule(
   tempoBpm: number,
   transposeSemitones: number,
   capoFret = 0,
+  clawhammerTiming = false,
 ): TimedNote[] {
   const secondsPerBeat = 60 / tempoBpm;
   const sorted = [...notes].sort((a, b) => a.position - b.position);
   let elapsed = 0;
   const timed: TimedNote[] = [];
+  // The fret each string was last played at, for hammer-ons/pull-offs.
+  const lastFretByString = new Map<number, number>();
   for (const note of sorted) {
+    const durationSeconds = note.duration_beats * secondsPerBeat;
     if (!note.is_rest && note.frets.length > 0) {
       const sounds: SoundEvent[] = [];
       for (const fretEvent of note.frets) {
@@ -81,13 +112,43 @@ export function computePlaybackSchedule(
         if (fretEvent.technique === "bend" && fretEvent.bend_semitones != null) {
           sound.bendToFrequency = frequency * Math.pow(2, fretEvent.bend_semitones / 12);
         }
+        if (fretEvent.technique === "hammer_on" || fretEvent.technique === "pull_off") {
+          const fromFret = legatoFromFret(
+            fretEvent.technique,
+            fretEvent.fret,
+            lastFretByString.get(fretEvent.string_number),
+          );
+          if (fromFret !== null) {
+            sound.fromFrequency = frettedFrequency(openString, fromFret + capoFret, transposeSemitones);
+          }
+        }
+        lastFretByString.set(
+          fretEvent.string_number,
+          fretEvent.technique === "slide" && fretEvent.slide_to_fret != null ? fretEvent.slide_to_fret : fretEvent.fret,
+        );
         sounds.push(sound);
       }
       if (sounds.length > 0) {
-        timed.push({ ...note, startTimeSeconds: elapsed, sounds });
+        timed.push({ ...note, startTimeSeconds: elapsed, durationSeconds, sounds });
       }
     }
-    elapsed += note.duration_beats * secondsPerBeat;
+    if (clawhammerTiming && note.thumb_after) {
+      lastFretByString.set(5, 0);
+      timed.push({
+        ...note,
+        startTimeSeconds: elapsed + durationSeconds / 2,
+        durationSeconds: durationSeconds / 2,
+        sounds: [
+          {
+            stringNumber: 5,
+            fret: 0,
+            technique: "normal",
+            frequency: frettedFrequency(tuning.open_strings[4], capoFret, transposeSemitones),
+          },
+        ],
+      });
+    }
+    elapsed += durationSeconds;
   }
   return timed;
 }

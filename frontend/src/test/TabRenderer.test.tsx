@@ -24,6 +24,7 @@ function makeNote(overrides: Partial<NoteOut>): NoteOut {
     line_break: false,
     lyric: null,
     is_rest: false,
+    thumb_after: false,
     frets: [makeFret()],
     ...overrides,
   };
@@ -194,5 +195,21 @@ describe("TabRenderer", () => {
     const notes = Array.from({ length: 16 }, (_, i) => makeNote({ id: `n${i}`, position: i, frets: [] }));
     const { container } = render(<TabRenderer notes={notes} />);
     expect(container.querySelectorAll(".bar-break")).toHaveLength(0);
+  });
+
+  it("shows a clawhammer thumb pluck as (0) on the 5th string, only in clawhammer mode", () => {
+    const notes = [
+      makeNote({ id: "a", position: 0, thumb_after: true }),
+      makeNote({ id: "b", position: 1, thumb_after: true, frets: [makeFret({ string_number: 5, fret: 2 })] }),
+    ];
+    const { container, rerender } = render(<TabRenderer notes={notes} clawhammerTiming />);
+    const fifthString = () =>
+      Array.from(container.querySelectorAll(".tab-string-row")[4].querySelectorAll(".tab-fret-cell")).map(
+        (c) => c.textContent,
+      );
+    expect(fifthString()).toEqual(["(0)", "2 (0)"]);
+
+    rerender(<TabRenderer notes={notes} />);
+    expect(fifthString()).toEqual(["-", "2"]);
   });
 });

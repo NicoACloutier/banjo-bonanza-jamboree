@@ -52,6 +52,11 @@ export interface NoteIn {
   line_break: boolean;
   lyric?: string | null;
   is_rest: boolean;
+  /**
+   * Clawhammer mode only: pluck the open 5th string halfway through this
+   * note (on the off-beat), without taking extra time.
+   */
+  thumb_after: boolean;
   /** One entry per string sounded; more than one entry means a chord. Empty for a rest. */
   frets: NoteFretIn[];
 }
@@ -63,6 +68,7 @@ export interface NoteOut {
   line_break: boolean;
   lyric: string | null;
   is_rest: boolean;
+  thumb_after: boolean;
   frets: NoteFretOut[];
 }
 
@@ -76,6 +82,8 @@ export interface TabCreateRequest {
   capo_fret: number;
   /** How many bars each rendered line of 16 notes is visually divided into (1, 2, or 4). */
   bars_per_line: number;
+  /** Clawhammer mode: enables notes' `thumb_after` 5th-string plucks. */
+  clawhammer_timing: boolean;
   notes: NoteIn[];
   publish: boolean;
 }
@@ -104,6 +112,7 @@ export interface TabDetail {
   tempo_bpm: number;
   capo_fret: number;
   bars_per_line: number;
+  clawhammer_timing: boolean;
   status: TabStatus;
   vote_count: number;
   owner_id: string;
@@ -158,5 +167,6 @@ export interface TabRevisionDetail {
   tempo_bpm: number;
   capo_fret: number;
   bars_per_line: number;
+  clawhammer_timing: boolean;
   notes: NoteOut[];
 }

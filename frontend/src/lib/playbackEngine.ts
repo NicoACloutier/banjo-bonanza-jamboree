@@ -7,9 +7,39 @@
  * (e.g. the auto-scroll feature) can use to know which note is currently
  * sounding.
  */
-import { applyFadeEnvelope, synthesizePluck, synthesizeSlide } from "./pluckSynth";
-import { computePlaybackSchedule, totalDurationSeconds, type TimedNote } from "./tabLayout";
+import { applyFadeEnvelope, synthesizePitchChange, synthesizePluck, synthesizeSlide } from "./pluckSynth";
+import { computePlaybackSchedule, totalDurationSeconds, type SoundEvent, type TimedNote } from "./tabLayout";
 import type { NoteOut, TuningOut } from "../types/api";
+
+/** Render one string's sound for a note, shaped by its technique. */
+function synthesizeSound(sound: SoundEvent, sampleRate: number, durationSeconds: number): Float32Array {
+  const common = { sampleRate, durationSeconds, damping: 0.4 };
+  if (sound.technique === "slide" && sound.slideToFrequency !== undefined) {
+    // Pluck, then slide into the target fret around the middle of the note.
+    return synthesizePitchChange({
+      ...common,
+      startFrequency: sound.frequency,
+      endFrequency: sound.slideToFrequency,
+      changeAtFraction: 0.4,
+      changeOverFraction: 0.2,
+    });
+  }
+  if (sound.technique === "bend" && sound.bendToFrequency !== undefined) {
+    return synthesizeSlide({ ...common, startFrequency: sound.frequency, endFrequency: sound.bendToFrequency });
+  }
+  if ((sound.technique === "hammer_on" || sound.technique === "pull_off") && sound.fromFrequency !== undefined) {
+    // Pluck the previous fret, then hammer/pull to this one halfway through.
+    return synthesizePitchChange({
+      ...common,
+      startFrequency: sound.fromFrequency,
+      endFrequency: sound.frequency,
+      changeAtFraction: 0.5,
+      changeOverFraction: 0,
+      reexcite: sound.technique === "pull_off" ? 0.5 : 0.3,
+    });
+  }
+  return synthesizePluck({ ...common, frequency: sound.frequency });
+}
 
 export interface PlaybackCallbacks {
   onProgress?: (currentNoteId: string | null, elapsedSeconds: number) => void;
@@ -35,6 +65,7 @@ export class TabPlaybackEngine {
     tempoBpm: number;
     transposeSemitones: number;
     capoFret: number;
+    clawhammerTiming: boolean;
     startPosition: number;
     endPosition: number;
   } | null = null;
@@ -60,44 +91,40 @@ export class TabPlaybackEngine {
     tuning: TuningOut,
     tempoBpm: number,
     transposeSemitones: number,
-    options: { capoFret?: number; loop?: { startPosition: number; endPosition: number } } = {},
+    options: {
+      capoFret?: number;
+      clawhammerTiming?: boolean;
+      loop?: { startPosition: number; endPosition: number };
+    } = {},
   ): void {
     this.stop();
     const ctx = this.ensureContext();
     const capoFret = options.capoFret ?? 0;
+    const clawhammerTiming = options.clawhammerTiming ?? false;
     let scheduleNotes = notes;
     if (options.loop) {
       const { startPosition, endPosition } = options.loop;
       scheduleNotes = notes.filter((n) => n.position >= startPosition && n.position <= endPosition);
     }
-    this.schedule = computePlaybackSchedule(scheduleNotes, tuning, tempoBpm, transposeSemitones, capoFret);
+    this.schedule = computePlaybackSchedule(
+      scheduleNotes,
+      tuning,
+      tempoBpm,
+      transposeSemitones,
+      capoFret,
+      clawhammerTiming,
+    );
     this.durationSeconds = totalDurationSeconds(scheduleNotes, tempoBpm);
     this.loopOptions = options.loop
-      ? { notes, tuning, tempoBpm, transposeSemitones, capoFret, ...options.loop }
+      ? { notes, tuning, tempoBpm, transposeSemitones, capoFret, clawhammerTiming, ...options.loop }
       : null;
     this.startedAtContextTime = ctx.currentTime + 0.05;
     this.playing = true;
 
     for (const note of this.schedule) {
-      const noteDurationSeconds = Math.max(0.05, note.duration_beats * (60 / tempoBpm));
+      const noteDurationSeconds = Math.max(0.05, note.durationSeconds);
       for (const sound of note.sounds) {
-        const isGlide =
-          (sound.technique === "slide" && sound.slideToFrequency !== undefined) ||
-          (sound.technique === "bend" && sound.bendToFrequency !== undefined);
-        const rawSamples = isGlide
-          ? synthesizeSlide({
-              startFrequency: sound.frequency,
-              endFrequency: (sound.slideToFrequency ?? sound.bendToFrequency)!,
-              sampleRate: ctx.sampleRate,
-              durationSeconds: noteDurationSeconds,
-              damping: 0.4,
-            })
-          : synthesizePluck({
-              frequency: sound.frequency,
-              sampleRate: ctx.sampleRate,
-              durationSeconds: noteDurationSeconds,
-              damping: 0.4,
-            });
+        const rawSamples = synthesizeSound(sound, ctx.sampleRate, noteDurationSeconds);
         const samples = applyFadeEnvelope(rawSamples);
         const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
         buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0);
@@ -105,10 +132,11 @@ export class TabPlaybackEngine {
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         const gain = ctx.createGain();
-        // Hammer-ons and pull-offs are played legato (fretting-hand only,
-        // no pick attack), so they should sound noticeably softer than a
-        // picked note; a plain note or slide keeps full pick volume.
-        gain.gain.value = sound.technique === "hammer_on" || sound.technique === "pull_off" ? 0.35 : 0.6;
+        // A hammer-on/pull-off with nothing to hammer/pull from is played
+        // legato only (fretting hand, no pick attack), so it's softer.
+        const legatoOnly =
+          (sound.technique === "hammer_on" || sound.technique === "pull_off") && sound.fromFrequency === undefined;
+        gain.gain.value = legatoOnly ? 0.35 : 0.6;
         source.connect(gain).connect(ctx.destination);
         source.start(this.startedAtContextTime + note.startTimeSeconds);
         this.sources.push(source);
@@ -122,10 +150,11 @@ export class TabPlaybackEngine {
       if (!this.playing) return;
       if (this.loopOptions) {
         // Restart the same looped region seamlessly rather than stopping.
-        const { notes: loopNotes, tuning: loopTuning, tempoBpm: loopTempo, transposeSemitones: loopTranspose, capoFret: loopCapo, startPosition, endPosition } =
+        const { notes: loopNotes, tuning: loopTuning, tempoBpm: loopTempo, transposeSemitones: loopTranspose, capoFret: loopCapo, clawhammerTiming: loopClawhammer, startPosition, endPosition } =
           this.loopOptions;
         this.play(loopNotes, loopTuning, loopTempo, loopTranspose, {
           capoFret: loopCapo,
+          clawhammerTiming: loopClawhammer,
           loop: { startPosition, endPosition },
         });
       } else {

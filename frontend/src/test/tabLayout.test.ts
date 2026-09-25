@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computePlaybackSchedule, splitIntoLines, totalDurationSeconds } from "../lib/tabLayout";
+import { frettedFrequency } from "../lib/audioTheory";
 import { getFallbackTuning } from "../lib/tunings";
 import type { NoteFretIn, NoteOut } from "../types/api";
 
@@ -23,6 +24,7 @@ function makeNote(overrides: Partial<NoteOut>): NoteOut {
     line_break: false,
     lyric: null,
     is_rest: false,
+    thumb_after: false,
     frets: [makeFret()],
     ...overrides,
   };
@@ -203,5 +205,109 @@ describe("tabLayout", () => {
     const notes = [makeNote({ frets: [makeFret({ technique: "drop_thumb" })] })];
     const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
     expect(schedule[0].sounds[0].bendToFrequency).toBeUndefined();
+  });
+
+  describe("clawhammer thumb pluck (thumb_after)", () => {
+    const melody = (id: string, position: number, overrides: Partial<NoteOut> = {}) =>
+      makeNote({ id, position, frets: [makeFret({ string_number: 3 })], ...overrides });
+
+    it("plucks the open 5th string halfway through the note, taking no extra time", () => {
+      const notes = [melody("a", 0, { thumb_after: true }), melody("b", 1)];
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, 0, true);
+      expect(schedule.map((n) => [n.id, n.startTimeSeconds, n.sounds[0].stringNumber])).toEqual([
+        ["a", 0, 3],
+        ["a", 0.5, 5],
+        ["b", 1, 3],
+      ]);
+      expect(schedule[1].sounds[0].frequency).toBeCloseTo(392, 0); // open G4
+      expect(schedule[1].durationSeconds).toBeCloseTo(0.5, 5);
+      expect(totalDurationSeconds(notes, 60)).toBeCloseTo(2, 5);
+    });
+
+    it("scales with the note's duration", () => {
+      const notes = [melody("a", 0, { duration_beats: 2, thumb_after: true })];
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, 0, true);
+      expect(schedule[1].startTimeSeconds).toBeCloseTo(1, 5);
+    });
+
+    it("can follow a rest", () => {
+      const notes = [makeNote({ id: "r", position: 0, is_rest: true, frets: [], thumb_after: true })];
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, 0, true);
+      expect(schedule.map((n) => [n.startTimeSeconds, n.sounds[0].stringNumber])).toEqual([[0.5, 5]]);
+    });
+
+    it("applies the capo and transposition to the 5th string", () => {
+      const notes = [melody("a", 0, { thumb_after: true })];
+      const plain = computePlaybackSchedule(notes, tuning, 60, 0, 0, true)[1].sounds[0].frequency;
+      const shifted = computePlaybackSchedule(notes, tuning, 60, 1, 2, true)[1].sounds[0].frequency;
+      expect(shifted / plain).toBeCloseTo(Math.pow(2, 3 / 12), 5);
+    });
+
+    it("is ignored when clawhammer mode is off", () => {
+      const notes = [melody("a", 0, { thumb_after: true }), melody("b", 1)];
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, 0, false);
+      expect(schedule.map((n) => n.startTimeSeconds)).toEqual([0, 1]);
+    });
+  });
+
+  describe("hammer-ons and pull-offs", () => {
+    const on = (id: string, position: number, fret: number, technique: NoteFretIn["technique"] = "normal") =>
+      makeNote({ id, position, frets: [makeFret({ string_number: 3, fret, technique })] });
+    const g3 = (fret: number) => frettedFrequency("G3", fret);
+
+    it("starts a hammer-on at the previous fret on that string, taking a normal note's time", () => {
+      const notes = [on("a", 0, 0), on("b", 1, 2, "hammer_on"), on("c", 2, 0)];
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+      expect(schedule.map((n) => n.startTimeSeconds)).toEqual([0, 1, 2]);
+      expect(schedule[1].sounds[0].fromFrequency).toBeCloseTo(g3(0), 3);
+      expect(schedule[1].sounds[0].frequency).toBeCloseTo(g3(2), 3);
+    });
+
+    it("starts a pull-off at the previous fret on that string", () => {
+      const notes = [on("a", 0, 3), on("b", 1, 0, "pull_off")];
+      const sound = computePlaybackSchedule(notes, tuning, 60, 0)[1].sounds[0];
+      expect(sound.fromFrequency).toBeCloseTo(g3(3), 3);
+      expect(sound.frequency).toBeCloseTo(g3(0), 3);
+    });
+
+    it("uses the previous fret on the same string, skipping notes on other strings", () => {
+      const notes = [
+        on("a", 0, 1),
+        makeNote({ id: "x", position: 1, frets: [makeFret({ string_number: 1, fret: 5 })] }),
+        on("b", 2, 3, "hammer_on"),
+      ];
+      expect(computePlaybackSchedule(notes, tuning, 60, 0)[2].sounds[0].fromFrequency).toBeCloseTo(g3(1), 3);
+    });
+
+    it("counts a slide's target fret as the string's last fret", () => {
+      const notes = [
+        makeNote({ id: "a", position: 0, frets: [makeFret({ string_number: 3, fret: 2, technique: "slide", slide_to_fret: 4 })] }),
+        on("b", 1, 2, "pull_off"),
+      ];
+      expect(computePlaybackSchedule(notes, tuning, 60, 0)[1].sounds[0].fromFrequency).toBeCloseTo(g3(4), 3);
+    });
+
+    it("with nothing before it, hammers on from the open string and pulls off from two frets up", () => {
+      expect(computePlaybackSchedule([on("h", 0, 2, "hammer_on")], tuning, 60, 0)[0].sounds[0].fromFrequency).toBeCloseTo(
+        g3(0),
+        3,
+      );
+      expect(computePlaybackSchedule([on("p", 0, 2, "pull_off")], tuning, 60, 0)[0].sounds[0].fromFrequency).toBeCloseTo(
+        g3(4),
+        3,
+      );
+    });
+
+    it("applies the capo to the starting fret too", () => {
+      const notes = [on("a", 0, 0), on("b", 1, 2, "hammer_on")];
+      const sound = computePlaybackSchedule(notes, tuning, 60, 0, 2)[1].sounds[0];
+      expect(sound.fromFrequency).toBeCloseTo(g3(2), 3);
+      expect(sound.frequency).toBeCloseTo(g3(4), 3);
+    });
+
+    it("does not set a starting pitch for plain notes", () => {
+      const schedule = computePlaybackSchedule([on("a", 0, 0), on("b", 1, 2)], tuning, 60, 0);
+      expect(schedule[1].sounds[0].fromFrequency).toBeUndefined();
+    });
   });
 });

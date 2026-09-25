@@ -114,6 +114,7 @@ export function TabViewPage() {
         : undefined;
     engineRef.current?.play(tab.notes, tuning, tempoBpm, transposeSemitones, {
       capoFret: tab.capo_fret,
+      clawhammerTiming: tab.clawhammer_timing,
       loop,
     });
     setIsPlaying(true);
@@ -198,7 +199,8 @@ export function TabViewPage() {
         {tab.artist && <>by {tab.artist} </>}
         {tab.album && <>· {tab.album} </>}
         · Tuning: {tuning.display_name}
-        {tab.capo_fret > 0 && <> · Capo: fret {tab.capo_fret}</>} · By{" "}
+        {tab.capo_fret > 0 && <> · Capo: fret {tab.capo_fret}</>}
+        {tab.clawhammer_timing && <> · Clawhammer</>} · By{" "}
         <Link to={`/users/${tab.owner_username}`}>{tab.owner_username}</Link>
         {tab.status === "draft" && <span className="tag">DRAFT</span>}
       </p>
@@ -326,7 +328,12 @@ export function TabViewPage() {
         </label>
       </div>
 
-      <TabRenderer notes={tab.notes} barsPerLine={tab.bars_per_line} playingNoteId={playingNoteId} />
+      <TabRenderer
+        notes={tab.notes}
+        barsPerLine={tab.bars_per_line}
+        clawhammerTiming={tab.clawhammer_timing}
+        playingNoteId={playingNoteId}
+      />
     </div>
   );
 }

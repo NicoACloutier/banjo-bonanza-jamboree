@@ -85,6 +85,9 @@ class Tab(Base):
     # (1, 2, or 4) -- purely a display/layout preference, saved per-tab so it
     # renders identically in both the editor and the read-only view.
     bars_per_line: Mapped[int] = mapped_column(Integer, default=4)
+    # Clawhammer mode: notes may set `thumb_after` to pluck the 5th string on
+    # the off-beat after them.
+    clawhammer_timing: Mapped[bool] = mapped_column(Boolean, default=False)
 
     status: Mapped[TabStatus] = mapped_column(
         Enum(TabStatus, native_enum=False), default=TabStatus.draft, index=True
@@ -130,6 +133,10 @@ class Note(Base):
     # fret numbers in the rendered tab -- just extra space before the next
     # note. A rest has no NoteFret rows.
     is_rest: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Clawhammer thumb stroke: in a tab with `clawhammer_timing` on, the open
+    # 5th string is plucked halfway through this note (on the off-beat),
+    # without taking any extra time.
+    thumb_after: Mapped[bool] = mapped_column(Boolean, default=False)
 
     tab: Mapped[Tab] = relationship(back_populates="notes")
     lyric: Mapped["Lyric | None"] = relationship(back_populates="note", uselist=False)

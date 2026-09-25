@@ -43,6 +43,7 @@ def note_to_out(note: Note) -> NoteOut:
         line_break=note.line_break,
         lyric=note.lyric.text if note.lyric else None,
         is_rest=note.is_rest,
+        thumb_after=note.thumb_after,
         frets=[note_fret_to_out(f) for f in sorted(note.frets, key=lambda f: f.string_number)],
     )
 
@@ -72,6 +73,7 @@ def tab_to_detail(tab: Tab, vote_count: int, has_voted: bool) -> TabDetail:
         tempo_bpm=tab.tempo_bpm,
         capo_fret=tab.capo_fret,
         bars_per_line=tab.bars_per_line,
+        clawhammer_timing=tab.clawhammer_timing,
         status=TabStatusOut(tab.status.value),
         vote_count=vote_count,
         owner_id=tab.owner_id,
@@ -104,6 +106,7 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
             line_break=n.line_break,
             lyric=n.lyric,
             is_rest=n.is_rest,
+            thumb_after=n.thumb_after,
             frets=[
                 NoteFretOut(
                     string_number=f.string_number,
@@ -129,5 +132,6 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
         tempo_bpm=snapshot.get("tempo_bpm", 100),
         capo_fret=snapshot.get("capo_fret", 0),
         bars_per_line=snapshot.get("bars_per_line", 4),
+        clawhammer_timing=snapshot.get("clawhammer_timing", False),
         notes=notes_out,
     )

@@ -29,6 +29,8 @@ export interface TabMetadata {
   capoFret: number;
   /** How many bars each rendered line of 16 notes is visually divided into (1, 2, or 4). */
   barsPerLine: number;
+  /** Clawhammer mode: notes can add a 5th-string thumb pluck after them (`thumb_after`). */
+  clawhammerTiming: boolean;
 }
 
 interface TabEditorProps {
@@ -111,6 +113,7 @@ export function createEmptyNote(position: number): NoteOut {
     line_break: false,
     lyric: null,
     is_rest: false,
+    thumb_after: false,
     frets: [],
   };
 }

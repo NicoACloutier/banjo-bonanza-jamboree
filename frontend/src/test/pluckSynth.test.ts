@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyFadeEnvelope, synthesizePluck } from "../lib/pluckSynth";
+import { applyFadeEnvelope, synthesizePitchChange, synthesizePluck } from "../lib/pluckSynth";
+import { detectPitch } from "../lib/pitchDetection";
 
 describe("pluckSynth", () => {
   it("produces a buffer of the requested duration/sample rate", () => {
@@ -42,3 +43,39 @@ function energyOf(samples: Float32Array): number {
   for (const s of samples) sum += s * s;
   return sum;
 }
+
+describe("synthesizePitchChange", () => {
+  const sampleRate = 44100;
+  const pitchAround = (samples: Float32Array, fraction: number) => {
+    const start = Math.floor(samples.length * fraction);
+    return detectPitch(samples.slice(start, start + 2048), sampleRate)!;
+  };
+
+  it("holds the starting pitch, then jumps to the ending pitch halfway (hammer-on)", () => {
+    const samples = synthesizePitchChange({
+      startFrequency: 196,
+      endFrequency: 220,
+      sampleRate,
+      durationSeconds: 1,
+      changeAtFraction: 0.5,
+      changeOverFraction: 0,
+      reexcite: 0.3,
+    });
+    expect(samples.length).toBe(sampleRate);
+    expect(Math.abs(pitchAround(samples, 0.2) - 196)).toBeLessThan(3);
+    expect(Math.abs(pitchAround(samples, 0.7) - 220)).toBeLessThan(3);
+  });
+
+  it("keeps output within [-1, 1] even with re-excitation", () => {
+    const samples = synthesizePitchChange({
+      startFrequency: 220,
+      endFrequency: 196,
+      sampleRate,
+      durationSeconds: 0.5,
+      changeAtFraction: 0.5,
+      changeOverFraction: 0,
+      reexcite: 1,
+    });
+    for (const sample of samples) expect(Math.abs(sample)).toBeLessThanOrEqual(1);
+  });
+});

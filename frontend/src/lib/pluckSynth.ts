@@ -64,31 +64,42 @@ export function applyFadeEnvelope(samples: Float32Array, fadeSamples = 32): Floa
   return result;
 }
 
-export interface SlideOptions {
-  /** Frequency (Hz) at the start of the slide (the fretted note played). */
+export interface PitchChangeOptions {
+  /** Frequency (Hz) the note is plucked at. */
   startFrequency: number;
-  /** Frequency (Hz) the pitch glides to by the end of the note's duration. */
+  /** Frequency (Hz) the pitch ends up at. */
   endFrequency: number;
   sampleRate: number;
   durationSeconds: number;
   damping?: number;
+  /** When the pitch starts to change, as a fraction of the duration (0 = immediately). */
+  changeAtFraction?: number;
+  /** How long the change takes, as a fraction of the duration (0 = instant, as in a hammer-on). */
+  changeOverFraction?: number;
+  /**
+   * Extra energy (0-1) put into the string when the change starts: a
+   * hammer-on's fretting finger striking the string, or a pull-off's finger
+   * plucking it as it leaves. 0 for a slide (no new attack).
+   */
+  reexcite?: number;
 }
 
 /**
- * Synthesize a slide: a single continuous pluck whose pitch glides smoothly
- * from `startFrequency` to `endFrequency` over the note's duration, as on a
- * banjo where the fretting hand slides along the string without a second
- * pick attack.
+ * Synthesize a single pluck whose pitch changes partway through, without a
+ * second pick attack: slides, hammer-ons, pull-offs and bends.
  *
  * Implemented as a Karplus-Strong delay line (like `synthesizePluck`) whose
- * length is smoothly re-interpolated sample-by-sample between the start and
- * end pitch's period, which continuously re-tunes the resonant pitch while
- * reusing the same excitation/feedback loop (so the sound stays connected,
- * as a real slide does, rather than sounding like two separate notes).
+ * effective length follows the pitch sample-by-sample, which re-tunes the
+ * resonant pitch while reusing the same excitation/feedback loop (so the
+ * sound stays connected, as on a real string, rather than sounding like two
+ * separate notes).
  */
-export function synthesizeSlide(options: SlideOptions): Float32Array {
+export function synthesizePitchChange(options: PitchChangeOptions): Float32Array {
   const { startFrequency, endFrequency, sampleRate, durationSeconds } = options;
   const damping = options.damping ?? 0.4;
+  const changeAt = options.changeAtFraction ?? 0;
+  const changeOver = options.changeOverFraction ?? 1;
+  const reexcite = options.reexcite ?? 0;
   if (startFrequency <= 0 || endFrequency <= 0) throw new Error("frequencies must be positive");
   if (sampleRate <= 0) throw new Error("sampleRate must be positive");
 
@@ -103,13 +114,17 @@ export function synthesizeSlide(options: SlideOptions): Float32Array {
 
   const output = new Float32Array(totalSamples);
   const decayFactor = 1 - damping * 0.02;
+  let reexcited = reexcite === 0;
 
   let readIndex = 0;
   for (let i = 0; i < totalSamples; i++) {
-    // Linearly interpolate the *effective* delay length across the slide's
-    // duration -- this bends the resonant pitch continuously.
     const t = totalSamples <= 1 ? 1 : i / (totalSamples - 1);
-    const currentFrequency = startFrequency + (endFrequency - startFrequency) * t;
+    if (!reexcited && t >= changeAt) {
+      for (let j = 0; j < maxDelayLength; j++) delayLine[j] += (Math.random() * 2 - 1) * reexcite;
+      reexcited = true;
+    }
+    const progress = changeOver <= 0 ? (t >= changeAt ? 1 : 0) : Math.min(1, Math.max(0, (t - changeAt) / changeOver));
+    const currentFrequency = startFrequency + (endFrequency - startFrequency) * progress;
     const effectiveLength = Math.max(2, Math.min(maxDelayLength, Math.round(sampleRate / currentFrequency)));
 
     const current = delayLine[readIndex % effectiveLength];
@@ -120,5 +135,25 @@ export function synthesizeSlide(options: SlideOptions): Float32Array {
     readIndex = (readIndex + 1) % effectiveLength;
   }
 
+  // Re-excitation can push the peak above 1; scale back into range.
+  let peak = 0;
+  for (let i = 0; i < totalSamples; i++) peak = Math.max(peak, Math.abs(output[i]));
+  if (peak > 1) for (let i = 0; i < totalSamples; i++) output[i] /= peak;
+
   return output;
+}
+
+export interface SlideOptions {
+  /** Frequency (Hz) at the start of the slide (the fretted note played). */
+  startFrequency: number;
+  /** Frequency (Hz) the pitch glides to by the end of the note's duration. */
+  endFrequency: number;
+  sampleRate: number;
+  durationSeconds: number;
+  damping?: number;
+}
+
+/** A pitch glide spanning the whole note (used for bends). */
+export function synthesizeSlide(options: SlideOptions): Float32Array {
+  return synthesizePitchChange({ ...options, changeAtFraction: 0, changeOverFraction: 1 });
 }
