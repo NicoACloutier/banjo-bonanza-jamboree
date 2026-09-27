@@ -111,6 +111,12 @@ class NoteIn(msgspec.Struct):
     # Clawhammer mode only: pluck the open 5th string halfway through this
     # note (on the off-beat), without taking extra time.
     thumb_after: bool = False
+    # Rhythm modifiers on duration_beats: dotted (x1.5), triplet (x2/3).
+    dotted: bool = False
+    triplet: bool = False
+    # Continues the previous note: shared strings at the same fret ring on
+    # instead of being picked again.
+    tied: bool = False
     # One entry per string sounded at this position; more than one entry
     # means a chord (multiple strings struck simultaneously). Must contain
     # exactly one entry per distinct string_number (1-5), and must be empty
@@ -126,6 +132,9 @@ class NoteOut(msgspec.Struct):
     lyric: str | None = None
     is_rest: bool = False
     thumb_after: bool = False
+    dotted: bool = False
+    triplet: bool = False
+    tied: bool = False
     frets: list[NoteFretOut] = msgspec.field(default_factory=list)
 
 
@@ -146,6 +155,10 @@ class TabCreateRequest(msgspec.Struct):
     bars_per_line: int = 4
     # Clawhammer mode: enables notes' `thumb_after` 5th-string plucks.
     clawhammer_timing: bool = False
+    # "2/4", "3/4", "4/4" or "6/8"; None keeps fixed bars_per_line dividers.
+    time_signature: str | None = None
+    # Pairs of eighth notes play long-short.
+    swing: bool = False
     # 5th-string capo fret (6-12); None = match the main capo; 0 = open.
     fifth_string_capo_fret: int | None = None
     notes: list[NoteIn] = msgspec.field(default_factory=list)
@@ -161,6 +174,8 @@ class TabUpdateRequest(msgspec.Struct):
     capo_fret: int = 0
     bars_per_line: int = 4
     clawhammer_timing: bool = False
+    time_signature: str | None = None
+    swing: bool = False
     fifth_string_capo_fret: int | None = None
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
@@ -201,6 +216,8 @@ class TabDetail(msgspec.Struct):
     created_at: datetime
     updated_at: datetime
     notes: list[NoteOut]
+    time_signature: str | None = None
+    swing: bool = False
     fifth_string_capo_fret: int | None = None
 
 
@@ -257,4 +274,6 @@ class TabRevisionDetail(msgspec.Struct):
     bars_per_line: int
     clawhammer_timing: bool
     notes: list[NoteOut]
+    time_signature: str | None = None
+    swing: bool = False
     fifth_string_capo_fret: int | None = None

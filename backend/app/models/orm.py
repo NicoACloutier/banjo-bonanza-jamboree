@@ -88,6 +88,12 @@ class Tab(Base):
     # Clawhammer mode: notes may set `thumb_after` to pluck the 5th string on
     # the off-beat after them.
     clawhammer_timing: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Time signature ("2/4", "3/4", "4/4" or "6/8"): bar lines fall at real
+    # measure boundaries. NULL (tabs from before time signatures existed)
+    # keeps the fixed `bars_per_line` dividers.
+    time_signature: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # Swing feel: pairs of eighth notes play long-short (2:1).
+    swing: Mapped[bool] = mapped_column(Boolean, default=False)
     # 5th-string capo/spike, as the fret it sits at (6-12; raises the 5th
     # string by fret - 5 semitones). NULL = the 5th string matches the main
     # capo (as if spiked to match); 0 = the 5th string is left open.
@@ -141,6 +147,12 @@ class Note(Base):
     # 5th string is plucked halfway through this note (on the off-beat),
     # without taking any extra time.
     thumb_after: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Rhythm modifiers on `duration_beats`: dotted (x1.5) and/or triplet (x2/3).
+    dotted: Mapped[bool] = mapped_column(Boolean, default=False)
+    triplet: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Tied to the previous note: strings it shares with the previous note (at
+    # the same fret) keep ringing instead of being picked again.
+    tied: Mapped[bool] = mapped_column(Boolean, default=False)
 
     tab: Mapped[Tab] = relationship(back_populates="notes")
     lyric: Mapped["Lyric | None"] = relationship(back_populates="note", uselist=False)

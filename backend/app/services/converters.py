@@ -44,6 +44,9 @@ def note_to_out(note: Note) -> NoteOut:
         lyric=note.lyric.text if note.lyric else None,
         is_rest=note.is_rest,
         thumb_after=note.thumb_after,
+        dotted=note.dotted,
+        triplet=note.triplet,
+        tied=note.tied,
         frets=[note_fret_to_out(f) for f in sorted(note.frets, key=lambda f: f.string_number)],
     )
 
@@ -82,6 +85,8 @@ def tab_to_detail(tab: Tab, vote_count: int, has_voted: bool) -> TabDetail:
         created_at=tab.created_at,
         updated_at=tab.updated_at,
         notes=[note_to_out(n) for n in sorted(tab.notes, key=lambda n: n.position)],
+        time_signature=tab.time_signature,
+        swing=tab.swing,
         fifth_string_capo_fret=tab.fifth_string_capo_fret,
     )
 
@@ -108,6 +113,9 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
             lyric=n.lyric,
             is_rest=n.is_rest,
             thumb_after=n.thumb_after,
+            dotted=n.dotted,
+            triplet=n.triplet,
+            tied=n.tied,
             frets=[
                 NoteFretOut(
                     string_number=f.string_number,
@@ -135,5 +143,7 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
         bars_per_line=snapshot.get("bars_per_line", 4),
         clawhammer_timing=snapshot.get("clawhammer_timing", False),
         notes=notes_out,
+        time_signature=snapshot.get("time_signature"),
+        swing=snapshot.get("swing", False),
         fifth_string_capo_fret=snapshot.get("fifth_string_capo_fret"),
     )

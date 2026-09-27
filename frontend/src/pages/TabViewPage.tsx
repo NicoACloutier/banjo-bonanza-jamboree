@@ -203,6 +203,10 @@ export function TabViewPage() {
         <Link to={`/users/${tab.owner_username}`}>{tab.owner_username}</Link>
         {tab.status === "draft" && <span className="tag">DRAFT</span>}
       </p>
+      <div className="tag-row">
+        {tab.time_signature && <span className="tag">{tab.time_signature}</span>}
+        {tab.swing && <span className="tag">Swing</span>}
+      </div>
 
       <div className="toolbar no-print">
         <VoteButton voteCount={tab.vote_count} hasVoted={tab.has_voted} onVote={handleVote} />
@@ -329,6 +333,7 @@ export function TabViewPage() {
 
       <TabRenderer
         notes={tab.notes}
+        timeSignature={tab.time_signature}
         barsPerLine={tab.bars_per_line}
         clawhammerTiming={tab.clawhammer_timing}
         playingNoteId={playingNoteId}

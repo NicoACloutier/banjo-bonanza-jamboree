@@ -13,7 +13,8 @@
  * pull-off, slide, bend, drop-thumb) and roll-pattern finger, since those
  * don't fit naturally into a single typed character. Each technique can
  * also be applied with a single keystroke (see `TECHNIQUE_SHORTCUTS`)
- * while a note with at least one fret is selected.
+ * while a note with at least one fret is selected. The same panel sets the
+ * note's rhythm (duration, dotted, triplet, tied to the previous note).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TabRenderer } from "./TabRenderer";
@@ -30,11 +31,11 @@ export interface TabMetadata {
   tempoBpm: number;
   /** Physical capo position (0 = no capo), 0-12 frets. */
   capoFret: number;
-  /** How many bars each rendered line of 16 notes is visually divided into (1, 2, or 4). */
+  /** Without a time signature: how many bars each rendered line of 16 notes is divided into (1, 2, or 4). */
   barsPerLine: number;
   /** Clawhammer mode: notes can add a 5th-string thumb pluck after them (`thumb_after`). */
   clawhammerTiming: boolean;
-  /** 5th-string capo. */
+  /** Time signature, swing and 5th-string capo. */
   settings: TabSettings;
 }
 
@@ -91,6 +92,14 @@ const FINGER_OPTIONS: { label: string; value: RightHandFinger | "" }[] = [
 /** Duration (in beats) cycled through by clicking a note's duration marker, in order. */
 const DURATION_CYCLE = [0.25, 0.5, 1, 2, 4];
 
+const DURATION_OPTIONS: { label: string; value: number }[] = [
+  { label: "Sixteenth", value: 0.25 },
+  { label: "Eighth", value: 0.5 },
+  { label: "Quarter", value: 1 },
+  { label: "Half", value: 2 },
+  { label: "Whole", value: 4 },
+];
+
 function createNoteId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -119,6 +128,9 @@ export function createEmptyNote(position: number): NoteOut {
     lyric: null,
     is_rest: false,
     thumb_after: false,
+    dotted: false,
+    triplet: false,
+    tied: false,
     frets: [],
   };
 }
@@ -393,20 +405,22 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
 
   return (
     <div>
-      <div className="toolbar">
-        <span>Bars per line:</span>
-        {BAR_OPTIONS.map((n) => (
-          <button
-            key={n}
-            type="button"
-            className={metadata.barsPerLine === n ? "" : "secondary"}
-            aria-pressed={metadata.barsPerLine === n}
-            onClick={() => onMetadataChange({ ...metadata, barsPerLine: n })}
-          >
-            {n} {n === 1 ? "bar" : "bars"}
-          </button>
-        ))}
-      </div>
+      {metadata.settings.time_signature === null && (
+        <div className="toolbar">
+          <span>Bars per line:</span>
+          {BAR_OPTIONS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={metadata.barsPerLine === n ? "" : "secondary"}
+              aria-pressed={metadata.barsPerLine === n}
+              onClick={() => onMetadataChange({ ...metadata, barsPerLine: n })}
+            >
+              {n} {n === 1 ? "bar" : "bars"}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="form-row">
         <label>
@@ -533,6 +547,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
         <div className="tab-preview-col">
           <TabRenderer
             notes={notes}
+            timeSignature={metadata.settings.time_signature}
             barsPerLine={metadata.barsPerLine}
             clawhammerTiming={metadata.clawhammerTiming}
             selectedNoteId={selectedNoteId}
@@ -586,6 +601,45 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
                     ))}
                 </>
               )}
+              <div className="form-row note-rhythm">
+                <label>
+                  Duration
+                  <select
+                    value={selectedNote.duration_beats}
+                    onChange={(e) => updateSelectedNote({ duration_beats: Number(e.target.value) })}
+                  >
+                    {DURATION_OPTIONS.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selectedNote.dotted}
+                    onChange={(e) => updateSelectedNote({ dotted: e.target.checked })}
+                  />
+                  Dotted
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selectedNote.triplet}
+                    onChange={(e) => updateSelectedNote({ triplet: e.target.checked })}
+                  />
+                  Triplet
+                </label>
+                <label className="checkbox-label" title="Let strings shared with the previous note ring on instead of picking them again">
+                  <input
+                    type="checkbox"
+                    checked={selectedNote.tied}
+                    onChange={(e) => updateSelectedNote({ tied: e.target.checked })}
+                  />
+                  Tied to previous
+                </label>
+              </div>
               {metadata.clawhammerTiming && (
                 <label className="checkbox-label">
                   <input

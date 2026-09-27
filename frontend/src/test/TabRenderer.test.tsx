@@ -25,6 +25,9 @@ function makeNote(overrides: Partial<NoteOut>): NoteOut {
     lyric: null,
     is_rest: false,
     thumb_after: false,
+    dotted: false,
+    triplet: false,
+    tied: false,
     frets: [makeFret()],
     ...overrides,
   };
@@ -211,5 +214,24 @@ describe("TabRenderer", () => {
 
     rerender(<TabRenderer notes={notes} />);
     expect(fifthString()).toEqual(["-", "2"]);
+  });
+
+  it("writes tied frets in parentheses", () => {
+    const notes = [
+      makeNote({ id: "a", position: 0, frets: [makeFret({ string_number: 3, fret: 2 })] }),
+      makeNote({ id: "b", position: 1, tied: true, frets: [makeFret({ string_number: 3, fret: 2 })] }),
+    ];
+    const { container } = render(<TabRenderer notes={notes} />);
+    const thirdString = container.querySelectorAll(".tab-string-row")[2].querySelectorAll(".tab-fret-cell");
+    expect(Array.from(thirdString).map((c) => c.textContent)).toEqual(["2", "(2)"]);
+  });
+
+  it("puts bar lines at measure boundaries for the time signature", () => {
+    const notes = [0, 1, 2, 3, 4, 5].map((i) => makeNote({ id: `n${i}`, position: i }));
+    const { container } = render(<TabRenderer notes={notes} timeSignature="3/4" />);
+    const firstString = container.querySelectorAll(".tab-string-row")[0].querySelectorAll(".tab-fret-cell");
+    expect(Array.from(firstString).map((c) => c.classList.contains("bar-break"))).toEqual([
+      false, false, false, true, false, false,
+    ]);
   });
 });

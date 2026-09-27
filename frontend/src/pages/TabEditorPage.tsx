@@ -21,6 +21,9 @@ function notesToNoteIn(notes: NoteOut[]): NoteIn[] {
     lyric: n.lyric,
     is_rest: n.is_rest,
     thumb_after: n.thumb_after,
+    dotted: n.dotted,
+    triplet: n.triplet,
+    tied: n.tied,
     frets: n.frets.map((f) => ({
       string_number: f.string_number,
       fret: f.fret,
@@ -81,6 +84,8 @@ export function TabEditorPage() {
           barsPerLine: tab.bars_per_line,
           clawhammerTiming: tab.clawhammer_timing,
           settings: {
+            time_signature: tab.time_signature,
+            swing: tab.swing,
             fifth_string_capo_fret: tab.fifth_string_capo_fret,
           },
         });

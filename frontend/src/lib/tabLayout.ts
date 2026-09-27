@@ -4,7 +4,7 @@
  * Kept free of DOM/Web Audio dependencies so it is easily unit-testable.
  */
 import { frettedFrequency } from "./audioTheory";
-import type { NoteOut, TuningOut } from "../types/api";
+import type { NoteOut, TimeSignature, TuningOut } from "../types/api";
 
 /** One string's sounding event within a (possibly chordal) note slot. */
 export interface SoundEvent {
@@ -21,6 +21,53 @@ export interface SoundEvent {
    * at before hammering/pulling to `frequency` halfway through.
    */
   fromFrequency?: number;
+  /**
+   * How long this string rings, if different from its note's duration: a
+   * sound that later notes are tied to keeps ringing through them.
+   */
+  durationSeconds?: number;
+}
+
+/** A note's length in beats (quarter notes), after its dotted/triplet modifiers. */
+export function effectiveBeats(note: NoteOut): number {
+  return note.duration_beats * (note.dotted ? 1.5 : 1) * (note.triplet ? 2 / 3 : 1);
+}
+
+/** Length of one bar in beats (quarter notes); 6/8 is six eighth notes, i.e. three beats. */
+export function barLengthBeats(timeSignature: TimeSignature): number {
+  return { "2/4": 2, "3/4": 3, "4/4": 4, "6/8": 3 }[timeSignature];
+}
+
+// Beat positions within this of a bar line (or of each other) count as equal,
+// absorbing floating-point error from triplets (thirds of a beat).
+const BEAT_EPSILON = 1e-6;
+
+/**
+ * Ids of the notes that start a new bar (other than the first), given the
+ * time signature: a note starts a bar when the beats before it add up to a
+ * whole number of bars.
+ */
+export function barStartNoteIds(notes: NoteOut[], timeSignature: TimeSignature): Set<string> {
+  const barLength = barLengthBeats(timeSignature);
+  const ids = new Set<string>();
+  let beat = 0;
+  for (const note of [...notes].sort((a, b) => a.position - b.position)) {
+    const barsSoFar = beat / barLength;
+    if (beat > BEAT_EPSILON && Math.abs(barsSoFar - Math.round(barsSoFar)) < BEAT_EPSILON) ids.add(note.id);
+    beat += effectiveBeats(note);
+  }
+  return ids;
+}
+
+/**
+ * Swing feel as a warp of beat positions: within each beat, the first eighth
+ * note is stretched to two-thirds of the beat and the second squeezed into
+ * the last third (a 2:1 long-short feel). Whole beats are unchanged.
+ */
+export function swingBeat(beat: number): number {
+  const whole = Math.floor(beat + BEAT_EPSILON);
+  const fraction = Math.max(0, beat - whole);
+  return whole + (fraction < 0.5 ? (fraction * 4) / 3 : 2 / 3 + ((fraction - 0.5) * 2) / 3);
 }
 
 /** How far the 5th string is raised: its own capo/spike if it has one, otherwise the main capo. */
@@ -36,6 +83,8 @@ export interface ScheduleOptions {
   fifthStringCapoFret?: number | null;
   /** Clawhammer mode: notes' `thumb_after` plucks sound. */
   clawhammerTiming?: boolean;
+  /** Swing feel: eighth-note pairs play long-short. */
+  swing?: boolean;
 }
 
 /**
@@ -56,8 +105,8 @@ export interface TimedNote extends NoteOut {
   durationSeconds: number;
   /**
    * All strings sounding simultaneously at this position (a chord has more
-   * than one). Always non-empty for entries in the returned schedule
-   * (rests never appear here at all).
+   * than one). Rests never appear in the schedule; this is only empty for a
+   * note whose strings are all tied to earlier sounds.
    */
   sounds: SoundEvent[];
 }
@@ -70,6 +119,9 @@ export interface TimedNote extends NoteOut {
  * schedule entry whose `sounds` array has one item per string, all sharing
  * the same start time so they ring out together.
  *
+ * Each note lasts `effectiveBeats` (its duration with dotted/triplet
+ * applied); with `swing`, beat positions are warped by `swingBeat`.
+ *
  * The capo raises every string's sounding pitch by that many frets (a
  * physical capo shortens the vibrating string length), except that the 5th
  * string follows its own capo/spike when it has one (see
@@ -79,6 +131,11 @@ export interface TimedNote extends NoteOut {
  * Hammer-ons and pull-offs take the same time as a plain note, but are
  * plucked at the previous fret on that string and change to the written
  * fret halfway through (see `SoundEvent.fromFrequency`).
+ *
+ * A `tied` note doesn't re-pick strings it shares (at the same fret) with
+ * the string's last sound: that sound rings on through it instead. If every
+ * string is tied, the note's entry has no sounds (it still marks the time,
+ * for playback highlighting).
  *
  * With `clawhammerTiming`, a note with `thumb_after` also gets a clawhammer
  * thumb stroke: the open 5th string, plucked halfway through the note (on
@@ -92,18 +149,25 @@ export function computePlaybackSchedule(
   transposeSemitones: number,
   options: ScheduleOptions = {},
 ): TimedNote[] {
-  const { capoFret = 0, fifthStringCapoFret = null, clawhammerTiming = false } = options;
+  const { capoFret = 0, fifthStringCapoFret = null, clawhammerTiming = false, swing = false } = options;
   const secondsPerBeat = 60 / tempoBpm;
+  const timeAt = (beat: number) => (swing ? swingBeat(beat) : beat) * secondsPerBeat;
   const capoFor = (stringNumber: number) =>
     stringNumber === 5 ? fifthStringRaise(capoFret, fifthStringCapoFret) : capoFret;
 
   const sorted = [...notes].sort((a, b) => a.position - b.position);
-  let elapsed = 0;
+  let beat = 0;
   const timed: TimedNote[] = [];
-  // The fret each string was last played at, for hammer-ons/pull-offs.
+  // The fret each string was last played at, for hammer-ons/pull-offs and ties.
   const lastFretByString = new Map<number, number>();
+  // Each string's most recent sound and when it started, so ties can extend it.
+  const lastSoundByString = new Map<number, { sound: SoundEvent; startTimeSeconds: number; durationSeconds: number }>();
+
   for (const note of sorted) {
-    const durationSeconds = note.duration_beats * secondsPerBeat;
+    const beats = effectiveBeats(note);
+    const startTimeSeconds = timeAt(beat);
+    const endTimeSeconds = timeAt(beat + beats);
+    const durationSeconds = endTimeSeconds - startTimeSeconds;
     if (!note.is_rest && note.frets.length > 0) {
       const sounds: SoundEvent[] = [];
       for (const fretEvent of note.frets) {
@@ -114,6 +178,15 @@ export function computePlaybackSchedule(
         // stale/malformed client-side data) must not crash the whole
         // schedule -- skip just this string's sound rather than throwing.
         if (openString === undefined) continue;
+
+        const previous = lastSoundByString.get(stringNumber);
+        if (note.tied && previous && lastFretByString.get(stringNumber) === fretEvent.fret) {
+          // Tied: let the earlier sound ring on to the end of this note.
+          previous.durationSeconds = endTimeSeconds - previous.startTimeSeconds;
+          previous.sound.durationSeconds = previous.durationSeconds;
+          continue;
+        }
+
         const capo = capoFor(stringNumber);
         const frequency = frettedFrequency(openString, fretEvent.fret + capo, transposeSemitones);
         const sound: SoundEvent = {
@@ -138,36 +211,33 @@ export function computePlaybackSchedule(
           stringNumber,
           fretEvent.technique === "slide" && fretEvent.slide_to_fret != null ? fretEvent.slide_to_fret : fretEvent.fret,
         );
+        lastSoundByString.set(stringNumber, { sound, startTimeSeconds, durationSeconds });
         sounds.push(sound);
       }
-      if (sounds.length > 0) {
-        timed.push({ ...note, startTimeSeconds: elapsed, durationSeconds, sounds });
+      if (sounds.length > 0 || note.tied) {
+        timed.push({ ...note, startTimeSeconds, durationSeconds, sounds });
       }
     }
     if (clawhammerTiming && note.thumb_after) {
+      const thumbStart = timeAt(beat + beats / 2);
+      const sound: SoundEvent = {
+        stringNumber: 5,
+        fret: 0,
+        technique: "normal",
+        frequency: frettedFrequency(tuning.open_strings[4], capoFor(5), transposeSemitones),
+      };
       lastFretByString.set(5, 0);
-      timed.push({
-        ...note,
-        startTimeSeconds: elapsed + durationSeconds / 2,
-        durationSeconds: durationSeconds / 2,
-        sounds: [
-          {
-            stringNumber: 5,
-            fret: 0,
-            technique: "normal",
-            frequency: frettedFrequency(tuning.open_strings[4], capoFor(5), transposeSemitones),
-          },
-        ],
-      });
+      lastSoundByString.set(5, { sound, startTimeSeconds: thumbStart, durationSeconds: endTimeSeconds - thumbStart });
+      timed.push({ ...note, startTimeSeconds: thumbStart, durationSeconds: endTimeSeconds - thumbStart, sounds: [sound] });
     }
-    elapsed += durationSeconds;
+    beat += beats;
   }
   return timed;
 }
 
-export function totalDurationSeconds(notes: NoteOut[], tempoBpm: number): number {
-  const secondsPerBeat = 60 / tempoBpm;
-  return notes.reduce((sum, n) => sum + n.duration_beats * secondsPerBeat, 0);
+export function totalDurationSeconds(notes: NoteOut[], tempoBpm: number, swing = false): number {
+  const beats = notes.reduce((sum, n) => sum + effectiveBeats(n), 0);
+  return (swing ? swingBeat(beats) : beats) * (60 / tempoBpm);
 }
 
 /** Notes per rendered tab line before an automatic line break is inserted. */

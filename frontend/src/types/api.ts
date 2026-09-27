@@ -57,6 +57,11 @@ export interface NoteIn {
    * note (on the off-beat), without taking extra time.
    */
   thumb_after: boolean;
+  /** Rhythm modifiers on `duration_beats`: dotted (x1.5) and triplet (x2/3). */
+  dotted: boolean;
+  triplet: boolean;
+  /** Continues the previous note: shared strings at the same fret ring on instead of being picked again. */
+  tied: boolean;
   /** One entry per string sounded; more than one entry means a chord. Empty for a rest. */
   frets: NoteFretIn[];
 }
@@ -69,12 +74,20 @@ export interface NoteOut {
   lyric: string | null;
   is_rest: boolean;
   thumb_after: boolean;
+  dotted: boolean;
+  triplet: boolean;
+  tied: boolean;
   frets: NoteFretOut[];
 }
 
+export type TimeSignature = "2/4" | "3/4" | "4/4" | "6/8";
 
 /** Tab-level settings shared by create/update requests, tab details and revisions. */
 export interface TabSettings {
+  /** Bar lines fall at measure boundaries; null (older tabs) keeps fixed `bars_per_line` dividers. */
+  time_signature: TimeSignature | null;
+  /** Pairs of eighth notes play long-short. */
+  swing: boolean;
   /** 5th-string capo fret (6-12); null = match the main capo; 0 = the 5th string stays open. */
   fifth_string_capo_fret: number | null;
 }

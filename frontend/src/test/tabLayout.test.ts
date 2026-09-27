@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { computePlaybackSchedule, splitIntoLines, totalDurationSeconds } from "../lib/tabLayout";
+import {
+  barStartNoteIds,
+  computePlaybackSchedule,
+  effectiveBeats,
+  splitIntoLines,
+  swingBeat,
+  totalDurationSeconds,
+} from "../lib/tabLayout";
 import { frettedFrequency } from "../lib/audioTheory";
 import { getFallbackTuning } from "../lib/tunings";
 import type { NoteFretIn, NoteOut } from "../types/api";
@@ -25,6 +32,9 @@ function makeNote(overrides: Partial<NoteOut>): NoteOut {
     lyric: null,
     is_rest: false,
     thumb_after: false,
+    dotted: false,
+    triplet: false,
+    tied: false,
     frets: [makeFret()],
     ...overrides,
   };
@@ -308,6 +318,71 @@ describe("tabLayout", () => {
     it("does not set a starting pitch for plain notes", () => {
       const schedule = computePlaybackSchedule([on("a", 0, 0), on("b", 1, 2)], tuning, 60, 0);
       expect(schedule[1].sounds[0].fromFrequency).toBeUndefined();
+    });
+  });
+
+  describe("rhythm", () => {
+    const n = (id: string, position: number, overrides: Partial<NoteOut> = {}) =>
+      makeNote({ id, position, frets: [makeFret({ string_number: 3 })], ...overrides });
+
+    it("applies dotted (x1.5) and triplet (x2/3) modifiers", () => {
+      expect(effectiveBeats(n("a", 0, { duration_beats: 1, dotted: true }))).toBe(1.5);
+      expect(effectiveBeats(n("a", 0, { duration_beats: 0.5, triplet: true }))).toBeCloseTo(1 / 3, 10);
+      const notes = [n("a", 0, { dotted: true, duration_beats: 0.5 }), n("b", 1, { duration_beats: 0.25 }), n("c", 2)];
+      expect(computePlaybackSchedule(notes, tuning, 60, 0).map((x) => x.startTimeSeconds)).toEqual([0, 0.75, 1]);
+      expect(totalDurationSeconds(notes, 60)).toBeCloseTo(2, 10);
+    });
+
+    it("fits three triplet eighths into one beat", () => {
+      const notes = [0, 1, 2, 3].map((i) => n(`t${i}`, i, { duration_beats: 0.5, triplet: i < 3 }));
+      const starts = computePlaybackSchedule(notes, tuning, 60, 0).map((x) => x.startTimeSeconds);
+      expect(starts[3]).toBeCloseTo(1, 10);
+    });
+
+    it("puts bar lines at measure boundaries for the time signature", () => {
+      const quarters = [0, 1, 2, 3, 4, 5, 6].map((i) => n(`q${i}`, i));
+      expect([...barStartNoteIds(quarters, "4/4")]).toEqual(["q4"]);
+      expect([...barStartNoteIds(quarters, "3/4")]).toEqual(["q3", "q6"]);
+      const eighths = Array.from({ length: 13 }, (_, i) => n(`e${i}`, i, { duration_beats: 0.5 }));
+      expect([...barStartNoteIds(eighths, "6/8")]).toEqual(["e6", "e12"]);
+      // A dotted quarter + eighth fills two beats.
+      const dotted = [n("d", 0, { dotted: true }), n("e", 1, { duration_beats: 0.5 }), n("f", 2), n("g", 3)];
+      expect([...barStartNoteIds(dotted, "2/4")]).toEqual(["f"]);
+    });
+
+    it("swings eighth notes long-short without changing whole beats", () => {
+      expect(swingBeat(0.5)).toBeCloseTo(2 / 3, 10);
+      expect(swingBeat(2)).toBe(2);
+      const eighths = [0, 1, 2, 3].map((i) => n(`e${i}`, i, { duration_beats: 0.5 }));
+      const schedule = computePlaybackSchedule(eighths, tuning, 60, 0, { swing: true });
+      expect(schedule.map((x) => x.startTimeSeconds)).toEqual([0, 2 / 3, 1, 1 + 2 / 3].map((t) => expect.closeTo(t, 10)));
+      expect(schedule[0].durationSeconds).toBeCloseTo(2 / 3, 10);
+      expect(schedule[1].durationSeconds).toBeCloseTo(1 / 3, 10);
+    });
+
+    it("rings a tied note on from the previous one instead of re-picking it", () => {
+      const notes = [
+        n("a", 0, { frets: [makeFret({ string_number: 3, fret: 2 }), makeFret({ string_number: 1, fret: 0 })] }),
+        n("b", 1, { tied: true, frets: [makeFret({ string_number: 3, fret: 2 }), makeFret({ string_number: 2, fret: 1 })] }),
+      ];
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+      // The tied string 3 isn't picked again; the new string 2 is.
+      expect(schedule[1].sounds.map((s) => s.stringNumber)).toEqual([2]);
+      // Note a's string 3 now rings through both notes; its string 1 doesn't.
+      const [string3, string1] = schedule[0].sounds;
+      expect(string3.durationSeconds).toBeCloseTo(2, 10);
+      expect(string1.durationSeconds).toBeUndefined();
+    });
+
+    it("re-picks a tied note whose fret differs from the previous one", () => {
+      const notes = [n("a", 0, { frets: [makeFret({ string_number: 3, fret: 2 })] }), n("b", 1, { tied: true, frets: [makeFret({ string_number: 3, fret: 4 })] })];
+      expect(computePlaybackSchedule(notes, tuning, 60, 0)[1].sounds.map((s) => s.fret)).toEqual([4]);
+    });
+
+    it("keeps a fully tied note in the schedule, silent, for highlighting", () => {
+      const notes = [n("a", 0), n("b", 1, { tied: true })];
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0);
+      expect(schedule.map((x) => [x.id, x.sounds.length])).toEqual([["a", 1], ["b", 0]]);
     });
   });
 

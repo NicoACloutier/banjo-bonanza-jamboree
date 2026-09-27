@@ -15,8 +15,14 @@
  *   - drop-thumb: "5d"   (right-hand drop-thumb technique on this fret; also
  *     underlined -- see `.tab-fret-cell.drop-thumb` in theme.css)
  *
- * A line of `barsPerLine` bars (1, 2, or 4) draws a vertical divider before
- * every Nth note within the line, purely a visual grouping aid.
+ * Bar lines: with a `timeSignature`, a vertical divider is drawn before
+ * each note that starts a new measure (by adding up note durations).
+ * Tabs without one (from before time signatures existed) instead divide
+ * each line into `barsPerLine` equal groups of notes.
+ *
+ * A tied note's frets that continue the previous note are written in
+ * parentheses, e.g. "(2)", and the duration marker shows dotted (".") and
+ * triplet ("³") notes.
  *
  * With `clawhammerTiming`, a note with `thumb_after` shows "(0)" in its
  * 5th-string cell (after the fret, e.g. "2 (0)", if the note also plays the
@@ -39,8 +45,8 @@
  * simply plays no sound.
  */
 import { useState } from "react";
-import { NOTES_PER_LINE, splitIntoLines } from "../lib/tabLayout";
-import type { NoteFretOut, NoteOut } from "../types/api";
+import { barStartNoteIds, NOTES_PER_LINE, splitIntoLines } from "../lib/tabLayout";
+import type { NoteFretOut, NoteOut, TimeSignature } from "../types/api";
 
 const STRING_LABELS = ["1", "2", "3", "4", "5"];
 
@@ -53,6 +59,30 @@ const DURATION_ABBR: Record<number, string> = {
   4: "whole",
 };
 
+
+/** A note's duration marker, e.g. "8th", "half.", "8th³"; blank for a plain quarter note. */
+function durationLabel(note: NoteOut): string {
+  const base = DURATION_ABBR[note.duration_beats] ?? `${note.duration_beats}b`;
+  const modifiers = `${note.dotted ? "." : ""}${note.triplet ? "³" : ""}`;
+  // A modified quarter note needs something to attach its modifiers to.
+  return modifiers && !base ? `♩${modifiers}` : base + modifiers;
+}
+
+/**
+ * "noteId:string" keys for tied notes' frets that continue the same fret on
+ * the same string from that string's previous note (written as "(2)").
+ */
+function tiedCellKeys(notes: NoteOut[]): Set<string> {
+  const keys = new Set<string>();
+  const lastFret = new Map<number, number>();
+  for (const note of [...notes].sort((a, b) => a.position - b.position)) {
+    for (const fret of note.frets) {
+      if (note.tied && lastFret.get(fret.string_number) === fret.fret) keys.add(`${note.id}:${fret.string_number}`);
+      lastFret.set(fret.string_number, fret.technique === "slide" && fret.slide_to_fret !== null ? fret.slide_to_fret : fret.fret);
+    }
+  }
+  return keys;
+}
 
 const TECHNIQUE_SUFFIX: Record<NoteFretOut["technique"], string> = {
   normal: "",
@@ -104,7 +134,9 @@ function fretCellText(fretEvent: NoteFretOut): string {
 
 interface TabRendererProps {
   notes: NoteOut[];
-  /** How many bars each line of notes is visually divided into (1, 2, or 4); defaults to 1 (no internal dividers). */
+  /** Draws bar lines at measure boundaries; null/undefined falls back to `barsPerLine`. */
+  timeSignature?: TimeSignature | null;
+  /** Without a time signature: how many bars each line of notes is divided into (1, 2, or 4); defaults to 1. */
   barsPerLine?: number;
   /** Clawhammer mode: show notes' 5th-string thumb plucks as "(0)". */
   clawhammerTiming?: boolean;
@@ -134,6 +166,7 @@ interface EditingCell {
 
 export function TabRenderer({
   notes,
+  timeSignature = null,
   barsPerLine = 1,
   clawhammerTiming = false,
   playingNoteId,
@@ -148,9 +181,14 @@ export function TabRenderer({
   const [editingValue, setEditingValue] = useState("");
 
   const lines = splitIntoLines(notes);
-  // Notes per bar within a line, e.g. 4 bars per 16-note line = 4 notes/bar.
+  const tiedCells = tiedCellKeys(notes);
+  // Bar lines: at measure boundaries for the time signature, or (older tabs)
+  // every Nth note, e.g. 4 bars per 16-note line = 4 notes/bar. Never before
+  // the first note of a line.
+  const barStarts = timeSignature ? barStartNoteIds(notes, timeSignature) : null;
   const notesPerBar = Math.max(1, Math.floor(NOTES_PER_LINE / barsPerLine));
-  const isBarBreak = (noteIndexInLine: number) => noteIndexInLine > 0 && noteIndexInLine % notesPerBar === 0;
+  const isBarBreak = (note: NoteOut, noteIndexInLine: number) =>
+    noteIndexInLine > 0 && (barStarts ? barStarts.has(note.id) : noteIndexInLine % notesPerBar === 0);
 
   if (lines.length === 0) {
     return <p className="muted-text">No notes yet -- add some below to start your tab.</p>;
@@ -178,12 +216,12 @@ export function TabRenderer({
           {editable && (
             <div className="tab-duration-row">
               {line.map((note, noteIndex) => {
-                const abbr = DURATION_ABBR[note.duration_beats] ?? `${note.duration_beats}b`;
+                const abbr = durationLabel(note);
                 return (
                   <button
                     key={note.id}
                     type="button"
-                    className={["duration-marker", isBarBreak(noteIndex) ? "bar-break" : ""]
+                    className={["duration-marker", isBarBreak(note, noteIndex) ? "bar-break" : ""]
                       .filter(Boolean)
                       .join(" ")}
                     title="Click to change this note's duration"
@@ -208,7 +246,7 @@ export function TabRenderer({
                   const isPlaying = note.id === playingNoteId;
                   const isSelected = note.id === selectedNoteId;
                   const isChord = note.frets.length > 1;
-                  const barBreak = isBarBreak(noteIndex);
+                  const barBreak = isBarBreak(note, noteIndex);
                   const showThumbPluck = stringNumber === 5 && clawhammerTiming && note.thumb_after;
                   const isEditingThisCell =
                     editingCell?.noteId === note.id && editingCell?.stringNumber === stringNumber;
@@ -308,7 +346,11 @@ export function TabRenderer({
                           </span>
                         </>
                       ) : fretOnThisString ? (
-                        fretCellText(fretOnThisString)
+                        tiedCells.has(`${note.id}:${stringNumber}`) ? (
+                          `(${fretCellText(fretOnThisString)})`
+                        ) : (
+                          fretCellText(fretOnThisString)
+                        )
                       ) : (
                         "-"
                       )}
@@ -320,7 +362,7 @@ export function TabRenderer({
           })}
           <div className="tab-lyrics-row">
             {line.map((note, noteIndex) => {
-              const barBreak = isBarBreak(noteIndex);
+              const barBreak = isBarBreak(note, noteIndex);
               return editable ? (
                 <input
                   key={note.id}

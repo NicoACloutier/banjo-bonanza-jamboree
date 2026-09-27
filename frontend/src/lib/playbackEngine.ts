@@ -109,7 +109,7 @@ export class TabPlaybackEngine {
       scheduleNotes = notes.filter((n) => n.position >= startPosition && n.position <= endPosition);
     }
     this.schedule = computePlaybackSchedule(scheduleNotes, tuning, tempoBpm, transposeSemitones, options);
-    this.durationSeconds = totalDurationSeconds(scheduleNotes, tempoBpm);
+    this.durationSeconds = totalDurationSeconds(scheduleNotes, tempoBpm, options.swing);
     this.loopOptions = options.loop ? { notes, tuning, tempoBpm, transposeSemitones, options } : null;
     this.startedAtContextTime = ctx.currentTime + 0.05;
     this.playing = true;
@@ -117,7 +117,9 @@ export class TabPlaybackEngine {
     for (const note of this.schedule) {
       const noteDurationSeconds = Math.max(0.05, note.durationSeconds);
       for (const sound of note.sounds) {
-        const rawSamples = synthesizeSound(sound, ctx.sampleRate, noteDurationSeconds);
+        // A sound that later notes are tied to rings on past its own note.
+        const soundDurationSeconds = Math.max(noteDurationSeconds, sound.durationSeconds ?? 0);
+        const rawSamples = synthesizeSound(sound, ctx.sampleRate, soundDurationSeconds);
         const samples = applyFadeEnvelope(rawSamples);
         const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
         buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0);

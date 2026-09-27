@@ -57,6 +57,7 @@ _TAB_LOAD_OPTIONS = (
 _MAX_REVISIONS_PER_TAB = 50
 _MAX_CAPO_FRET = 12
 _VALID_BARS_PER_LINE = {1, 2, 4}
+TIME_SIGNATURES = {"2/4", "3/4", "4/4", "6/8"}
 
 
 async def _get_or_create_anonymous_user(db: AsyncSession) -> User:
@@ -134,6 +135,8 @@ def _validate_tab_request(body: TabCreateRequest | TabUpdateRequest) -> None:
     _validate_tuning(body.tuning_key)
     _validate_capo(body.capo_fret)
     _validate_bars_per_line(body.bars_per_line)
+    if body.time_signature is not None and body.time_signature not in TIME_SIGNATURES:
+        raise _bad_request(f"time_signature must be one of {sorted(TIME_SIGNATURES)}.")
     fifth = body.fifth_string_capo_fret
     if fifth is not None and fifth != 0 and not (6 <= fifth <= _MAX_CAPO_FRET):
         raise _bad_request(f"fifth_string_capo_fret must be 0 (open) or between 6 and {_MAX_CAPO_FRET}.")
@@ -150,6 +153,8 @@ def _apply_tab_request(tab: Tab, body: TabCreateRequest | TabUpdateRequest) -> N
     tab.capo_fret = body.capo_fret
     tab.bars_per_line = body.bars_per_line
     tab.clawhammer_timing = body.clawhammer_timing
+    tab.time_signature = body.time_signature
+    tab.swing = body.swing
     tab.fifth_string_capo_fret = body.fifth_string_capo_fret
     tab.status = TabStatus.published if body.publish else TabStatus.draft
 
@@ -263,6 +268,9 @@ async def _replace_notes(db: AsyncSession, tab: Tab, notes_in) -> None:
             line_break=note_in.line_break,
             is_rest=note_in.is_rest,
             thumb_after=note_in.thumb_after,
+            dotted=note_in.dotted,
+            triplet=note_in.triplet,
+            tied=note_in.tied,
         )
         db.add(note)
         await db.flush()
@@ -295,6 +303,8 @@ def _tab_as_request(tab: Tab) -> TabUpdateRequest:
         capo_fret=tab.capo_fret,
         bars_per_line=tab.bars_per_line,
         clawhammer_timing=tab.clawhammer_timing,
+        time_signature=tab.time_signature,
+        swing=tab.swing,
         fifth_string_capo_fret=tab.fifth_string_capo_fret,
         notes=[
             NoteIn(
@@ -304,6 +314,9 @@ def _tab_as_request(tab: Tab) -> TabUpdateRequest:
                 lyric=n.lyric.text if n.lyric else None,
                 is_rest=n.is_rest,
                 thumb_after=n.thumb_after,
+                dotted=n.dotted,
+                triplet=n.triplet,
+                tied=n.tied,
                 frets=[
                     NoteFretIn(
                         string_number=f.string_number,

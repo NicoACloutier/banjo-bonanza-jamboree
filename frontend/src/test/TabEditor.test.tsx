@@ -22,9 +22,12 @@ beforeEach(() => {
   engineStop.mockClear();
 });
 
+// Tabs without a time signature keep the fixed "bars per line" layout.
+const LEGACY_SETTINGS: TabSettings = { ...DEFAULT_TAB_SETTINGS, time_signature: null };
+
 function Harness({
   initialNotes = [] as NoteOut[],
-  settings = DEFAULT_TAB_SETTINGS,
+  settings = LEGACY_SETTINGS,
 }: {
   initialNotes?: NoteOut[];
   settings?: TabSettings;
@@ -449,7 +452,7 @@ describe("TabEditor", () => {
     expect(playedNotes).toHaveLength(2);
     expect(tuning.key).toBe(FALLBACK_TUNINGS[0].key);
     expect([tempo, transpose]).toEqual([100, 0]);
-    expect(options).toEqual({ capoFret: 0, fifthStringCapoFret: null, clawhammerTiming: false });
+    expect(options).toEqual({ capoFret: 0, fifthStringCapoFret: null, clawhammerTiming: false, swing: false });
 
     await user.click(screen.getByRole("button", { name: /stop/i }));
     expect(engineStop).toHaveBeenCalled();
@@ -494,5 +497,47 @@ describe("TabEditor", () => {
     expect(screen.getByText(/transpose: \+2 frets/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^▶ play$/i }));
     expect(enginePlay.mock.calls[0][3]).toBe(2);
+  });
+
+  describe("rhythm", () => {
+    const FOUR_FOUR: TabSettings = { ...DEFAULT_TAB_SETTINGS, time_signature: "4/4" };
+    const barBreakCount = (container: HTMLElement) =>
+      container.querySelectorAll(".tab-string-row")[0].querySelectorAll(".bar-break").length;
+
+    it("draws bar lines from the time signature, and hides 'bars per line' when there is one", async () => {
+      const user = userEvent.setup();
+      const notes = Array.from({ length: 16 }, (_, i) => ({ ...createEmptyNote(i), duration_beats: 0.5 }));
+      const { container } = render(<Harness initialNotes={notes} settings={FOUR_FOUR} />);
+      expect(screen.queryByRole("button", { name: "4 bars" })).not.toBeInTheDocument();
+      // 16 eighth notes in 4/4 is two bars: one bar line, before note 9.
+      expect(barBreakCount(container)).toBe(1);
+
+      await user.selectOptions(screen.getByLabelText(/time signature/i), "2/4");
+      expect(barBreakCount(container)).toBe(3);
+
+      await user.selectOptions(screen.getByLabelText(/time signature/i), "");
+      expect(screen.getByRole("button", { name: "4 bars" })).toBeInTheDocument();
+    });
+
+    it("sets a note's duration, dotted, triplet and tie from the note panel", async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <Harness initialNotes={[createEmptyNote(0), createEmptyNote(1)]} settings={FOUR_FOUR} />,
+      );
+      await typeFret(user, container, 3, 0, "2");
+      await typeFret(user, container, 3, 1, "2"); // selects note 2
+
+      await user.selectOptions(screen.getByLabelText(/^duration$/i), "0.5");
+      await user.click(screen.getByLabelText(/dotted/i));
+      const markers = container.querySelectorAll(".duration-marker");
+      expect(markers[1]).toHaveTextContent("8th.");
+
+      await user.click(screen.getByLabelText(/triplet/i));
+      expect(markers[1]).toHaveTextContent("8th.³");
+
+      await user.click(screen.getByLabelText(/tied to previous/i));
+      const thirdString = container.querySelectorAll(".tab-string-row")[2].querySelectorAll(".tab-fret-cell");
+      expect(thirdString[1]).toHaveTextContent("(2)");
+    });
   });
 });

@@ -542,6 +542,17 @@ label select {
   color: var(--ember-dark);
 }
 
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.25rem 0;
+}
+
+.note-rhythm {
+  align-items: flex-end;
+}
+
 .tag {
   display: inline-block;
   background: var(--wood-plank);

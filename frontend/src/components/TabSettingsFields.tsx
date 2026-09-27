@@ -1,8 +1,11 @@
 /**
- * Editor field for a tab's 5th-string capo.
+ * Editor fields for a tab's rhythm (time signature, swing) and 5th-string capo.
  */
-import { FIFTH_STRING_CAPO_OPTIONS } from "../lib/tabSettings";
-import type { TabSettings } from "../types/api";
+import {
+  FIFTH_STRING_CAPO_OPTIONS,
+  TIME_SIGNATURES,
+} from "../lib/tabSettings";
+import type { TabSettings, TimeSignature } from "../types/api";
 
 interface TabSettingsFieldsProps {
   settings: TabSettings;
@@ -16,6 +19,20 @@ export function TabSettingsFields({ settings, onChange }: TabSettingsFieldsProps
     <>
       <div className="form-row">
         <label>
+          Time signature
+          <select
+            value={settings.time_signature ?? ""}
+            onChange={(e) => set({ time_signature: (e.target.value || null) as TimeSignature | null })}
+          >
+            {TIME_SIGNATURES.map((ts) => (
+              <option key={ts} value={ts}>
+                {ts}
+              </option>
+            ))}
+            <option value="">None (fixed bars per line)</option>
+          </select>
+        </label>
+        <label>
           5th-string capo
           <select
             value={settings.fifth_string_capo_fret ?? ""}
@@ -27,6 +44,10 @@ export function TabSettingsFields({ settings, onChange }: TabSettingsFieldsProps
               </option>
             ))}
           </select>
+        </label>
+        <label className="checkbox-label">
+          <input type="checkbox" checked={settings.swing} onChange={(e) => set({ swing: e.target.checked })} />
+          Swing eighth notes
         </label>
       </div>
     </>
