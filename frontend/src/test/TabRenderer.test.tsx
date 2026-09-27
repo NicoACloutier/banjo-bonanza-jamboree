@@ -28,6 +28,7 @@ function makeNote(overrides: Partial<NoteOut>): NoteOut {
     dotted: false,
     triplet: false,
     tied: false,
+    chord: null,
     frets: [makeFret()],
     ...overrides,
   };
@@ -224,6 +225,14 @@ describe("TabRenderer", () => {
     const { container } = render(<TabRenderer notes={notes} />);
     const thirdString = container.querySelectorAll(".tab-string-row")[2].querySelectorAll(".tab-fret-cell");
     expect(Array.from(thirdString).map((c) => c.textContent)).toEqual(["2", "(2)"]);
+  });
+
+  it("makes chord names clickable in read-only mode", async () => {
+    const onChordClick = vi.fn();
+    const notes = [makeNote({ id: "a", position: 0, chord: "G" }), makeNote({ id: "b", position: 1 })];
+    render(<TabRenderer notes={notes} onChordClick={onChordClick} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "G" }));
+    expect(onChordClick).toHaveBeenCalledWith("G");
   });
 
   it("puts bar lines at measure boundaries for the time signature", () => {

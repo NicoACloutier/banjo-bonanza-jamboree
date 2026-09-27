@@ -20,6 +20,8 @@
  * Tabs without one (from before time signatures existed) instead divide
  * each line into `barsPerLine` equal groups of notes.
  *
+ * Chord names sit in a row above the tab (editable in editable mode; in
+ * read-only mode, clickable via `onChordClick`, e.g. to show a diagram).
  * A tied note's frets that continue the previous note are written in
  * parentheses, e.g. "(2)", and the duration marker shows dotted (".") and
  * triplet ("³") notes.
@@ -154,6 +156,10 @@ interface TabRendererProps {
   onLyricChange?: (noteId: string, lyric: string) => void;
   /** Called when the user clicks a note's duration marker to cycle its duration (editable mode only). */
   onDurationCycle?: (noteId: string) => void;
+  /** Called when the user edits the chord name above a note (editable mode only). */
+  onChordChange?: (noteId: string, chord: string) => void;
+  /** Read-only mode: makes chord names clickable (e.g. to show the chord's diagram). */
+  onChordClick?: (chord: string) => void;
 }
 
 /** Which single cell (note + string) is currently showing an inline `<input>` instead of static text. */
@@ -175,6 +181,8 @@ export function TabRenderer({
   onFretChange,
   onLyricChange,
   onDurationCycle,
+  onChordChange,
+  onChordClick,
 }: TabRendererProps) {
   const editable = Boolean(onFretChange);
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
@@ -182,6 +190,7 @@ export function TabRenderer({
 
   const lines = splitIntoLines(notes);
   const tiedCells = tiedCellKeys(notes);
+  const hasChords = notes.some((n) => n.chord);
   // Bar lines: at measure boundaries for the time signature, or (older tabs)
   // every Nth note, e.g. 4 bars per 16-note line = 4 notes/bar. Never before
   // the first note of a line.
@@ -213,6 +222,42 @@ export function TabRenderer({
     <div className="tab-sheet">
       {lines.map((line, lineIndex) => (
         <div className="tab-line" key={lineIndex} data-line-index={lineIndex}>
+          {(editable || hasChords) && (
+            <div className="tab-chord-row">
+              {line.map((note, noteIndex) => {
+                const className = ["chord-token", isBarBreak(note, noteIndex) ? "bar-break" : ""].filter(Boolean).join(" ");
+                if (editable) {
+                  return (
+                    <input
+                      key={note.id}
+                      className={`${className} chord-token-input`}
+                      type="text"
+                      value={note.chord ?? ""}
+                      maxLength={16}
+                      aria-label="Chord at this note"
+                      onFocus={() => onNoteClick?.(note)}
+                      onChange={(e) => onChordChange?.(note.id, e.target.value)}
+                    />
+                  );
+                }
+                return note.chord && onChordClick ? (
+                  <button
+                    key={note.id}
+                    type="button"
+                    className={`${className} chord-token-button`}
+                    title={`Show the ${note.chord} chord`}
+                    onClick={() => onChordClick(note.chord!)}
+                  >
+                    {note.chord}
+                  </button>
+                ) : (
+                  <span key={note.id} className={className}>
+                    {note.chord ?? ""}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {editable && (
             <div className="tab-duration-row">
               {line.map((note, noteIndex) => {

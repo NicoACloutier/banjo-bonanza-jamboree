@@ -35,6 +35,7 @@ function makeNote(overrides: Partial<NoteOut>): NoteOut {
     dotted: false,
     triplet: false,
     tied: false,
+    chord: null,
     frets: [makeFret()],
     ...overrides,
   };

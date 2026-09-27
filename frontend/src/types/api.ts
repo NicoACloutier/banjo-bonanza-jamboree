@@ -62,6 +62,8 @@ export interface NoteIn {
   triplet: boolean;
   /** Continues the previous note: shared strings at the same fret ring on instead of being picked again. */
   tied: boolean;
+  /** Chord name shown above this note, e.g. "G", "D7", "Am". */
+  chord: string | null;
   /** One entry per string sounded; more than one entry means a chord. Empty for a rest. */
   frets: NoteFretIn[];
 }
@@ -77,6 +79,7 @@ export interface NoteOut {
   dotted: boolean;
   triplet: boolean;
   tied: boolean;
+  chord: string | null;
   frets: NoteFretOut[];
 }
 

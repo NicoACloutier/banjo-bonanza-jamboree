@@ -388,6 +388,86 @@ label select {
   color: var(--ember-dark);
 }
 
+/* Chord names above the tab, in the same columns as the notes. */
+.tab-chord-row {
+  display: flex;
+  white-space: nowrap;
+  min-height: 1.2rem;
+  margin-left: var(--tab-label-width);
+  font-weight: bold;
+}
+
+.chord-token {
+  flex: 0 0 auto;
+  width: var(--tab-cell-width);
+  margin-right: var(--tab-cell-gap);
+  font-size: 0.8rem;
+  text-align: center;
+  overflow: visible;
+}
+
+.tab-sheet input.chord-token-input {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px dotted var(--wood-plank);
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: bold;
+}
+
+.tab-sheet input.chord-token-input:focus {
+  border-bottom: 1px solid var(--ember-dark);
+  outline: none;
+}
+
+.tab-sheet button.chord-token-button {
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: var(--ember-dark);
+  font-family: inherit;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+.tab-sheet button.chord-token-button:active {
+  transform: none;
+}
+
+/* Chord diagrams (SVG) and the grid they're laid out in. */
+.chord-diagram {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  color: var(--ink);
+}
+
+.chord-diagram-dot {
+  fill: var(--ember-dark);
+}
+
+.chord-diagram figcaption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.chord-diagram figcaption .muted-text {
+  font-size: 0.7rem;
+}
+
+.chord-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
 /* Lyrics sit in the same columns as the notes above them (past the string
    label column), centred under each note like its fret number. */
 .tab-lyrics-row {
@@ -547,6 +627,17 @@ label select {
   flex-wrap: wrap;
   gap: 0.3rem;
   margin: 0.25rem 0;
+}
+
+/* A chord diagram picked from the tab (by clicking its name). */
+.chord-cell {
+  padding: 0.4rem;
+  border-radius: 6px;
+}
+
+.chord-cell.highlighted {
+  outline: 3px solid var(--gold);
+  background: var(--parchment-dark);
 }
 
 .note-rhythm {

@@ -18,6 +18,7 @@ export function Navbar() {
         <Link to="/">Browse</Link>
         <Link to="/tabs/new">New Tab</Link>
         <Link to="/tuner">Tuner</Link>
+        <Link to="/chords">Chords</Link>
         {user ? (
           <>
             <Link to={`/users/${user.username}`}>My Tabs ({user.username})</Link>

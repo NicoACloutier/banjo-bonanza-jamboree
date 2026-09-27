@@ -499,7 +499,7 @@ describe("TabEditor", () => {
     expect(enginePlay.mock.calls[0][3]).toBe(2);
   });
 
-  describe("rhythm", () => {
+  describe("rhythm and chords", () => {
     const FOUR_FOUR: TabSettings = { ...DEFAULT_TAB_SETTINGS, time_signature: "4/4" };
     const barBreakCount = (container: HTMLElement) =>
       container.querySelectorAll(".tab-string-row")[0].querySelectorAll(".bar-break").length;
@@ -538,6 +538,13 @@ describe("TabEditor", () => {
       await user.click(screen.getByLabelText(/tied to previous/i));
       const thirdString = container.querySelectorAll(".tab-string-row")[2].querySelectorAll(".tab-fret-cell");
       expect(thirdString[1]).toHaveTextContent("(2)");
+    });
+
+    it("types chord names above notes and shows the selected note's chord diagram", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} settings={FOUR_FOUR} />);
+      await user.type(screen.getByLabelText("Chord at this note"), "C");
+      expect(within(container.querySelector(".edit-note-col")!).getByRole("img", { name: /^C:/ })).toBeInTheDocument();
     });
   });
 });

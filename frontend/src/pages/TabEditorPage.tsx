@@ -24,6 +24,7 @@ function notesToNoteIn(notes: NoteOut[]): NoteIn[] {
     dotted: n.dotted,
     triplet: n.triplet,
     tied: n.tied,
+    chord: n.chord,
     frets: n.frets.map((f) => ({
       string_number: f.string_number,
       fret: f.fret,

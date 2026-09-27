@@ -14,12 +14,17 @@
  * don't fit naturally into a single typed character. Each technique can
  * also be applied with a single keystroke (see `TECHNIQUE_SHORTCUTS`)
  * while a note with at least one fret is selected. The same panel sets the
- * note's rhythm (duration, dotted, triplet, tied to the previous note).
+ * note's rhythm (duration, dotted, triplet, tied to the previous note), and
+ * shows a diagram of the chord named above it. Chord names are typed into
+ * the row above the tab.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChordDiagram } from "./ChordDiagram";
 import { TabRenderer } from "./TabRenderer";
 import { TabSettingsFields } from "./TabSettingsFields";
+import { findChordShapes, parseChord } from "../lib/chords";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
+import { fifthStringRaise } from "../lib/tabLayout";
 import { playOptionsFor } from "../lib/tabSettings";
 import type { NoteFretIn, NoteOut, RightHandFinger, TabSettings, Technique, TuningOut } from "../types/api";
 
@@ -131,6 +136,7 @@ export function createEmptyNote(position: number): NoteOut {
     dotted: false,
     triplet: false,
     tied: false,
+    chord: null,
     frets: [],
   };
 }
@@ -247,6 +253,17 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     );
     setIsPlaying(true);
   };
+
+  // Diagram for the selected note's chord, if it has one we can voice.
+  const selectedChord = selectedNote?.chord ? parseChord(selectedNote.chord) : null;
+  const selectedChordShape =
+    selectedChord && tuning
+      ? findChordShapes(selectedChord, tuning.open_strings, {
+          capoFret: metadata.capoFret,
+          fifthStringRaise: fifthStringRaise(metadata.capoFret, metadata.settings.fifth_string_capo_fret),
+          limit: 1,
+        })[0]
+      : undefined;
 
   const stop = () => {
     engineRef.current?.stop();
@@ -390,6 +407,10 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
 
   const handleLyricChange = (noteId: string, lyric: string) => {
     onNotesChange(notes.map((n) => (n.id === noteId ? { ...n, lyric: lyric || null } : n)));
+  };
+
+  const handleChordChange = (noteId: string, chord: string) => {
+    onNotesChange(notes.map((n) => (n.id === noteId ? { ...n, chord: chord.trim() ? chord : null } : n)));
   };
 
   const handleDurationCycle = (noteId: string) => {
@@ -541,7 +562,8 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
       </div>
       <p className="muted-text">
         Click a string's cell to type its fret number directly (leave it blank/backspace it to clear that
-        string back to "-"). Type lyrics straight into the box below each note.
+        string back to "-"). Type chord names into the row above the tab, and lyrics into the box below
+        each note.
       </p>
       <div className={selectedNote ? "tab-with-editor" : undefined}>
         <div className="tab-preview-col">
@@ -556,6 +578,7 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
             onFretChange={handleFretChange}
             onLyricChange={handleLyricChange}
             onDurationCycle={handleDurationCycle}
+            onChordChange={handleChordChange}
           />
           <div className="toolbar">
             <button
@@ -640,6 +663,12 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
                   Tied to previous
                 </label>
               </div>
+              {selectedNote.chord &&
+                (selectedChord && selectedChordShape ? (
+                  <ChordDiagram name={selectedChord.name} shape={selectedChordShape} />
+                ) : (
+                  <p className="muted-text">No diagram for "{selectedNote.chord}" in this tuning.</p>
+                ))}
               {metadata.clawhammerTiming && (
                 <label className="checkbox-label">
                   <input

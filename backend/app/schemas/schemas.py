@@ -117,6 +117,8 @@ class NoteIn(msgspec.Struct):
     # Continues the previous note: shared strings at the same fret ring on
     # instead of being picked again.
     tied: bool = False
+    # Chord name shown above this note, e.g. "G", "D7", "Am".
+    chord: str | None = None
     # One entry per string sounded at this position; more than one entry
     # means a chord (multiple strings struck simultaneously). Must contain
     # exactly one entry per distinct string_number (1-5), and must be empty
@@ -135,6 +137,7 @@ class NoteOut(msgspec.Struct):
     dotted: bool = False
     triplet: bool = False
     tied: bool = False
+    chord: str | None = None
     frets: list[NoteFretOut] = msgspec.field(default_factory=list)
 
 

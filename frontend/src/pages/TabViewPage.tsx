@@ -1,11 +1,12 @@
 /**
- * View + play a single tab: renders the tab sheet, provides playback
- * controls (tempo/transpose/auto-scroll), and lets logged-in users vote or
- * edit their own tab.
+ * View + play a single tab: renders the tab sheet and its chord diagrams,
+ * provides playback controls (tempo/transpose/auto-scroll), and lets
+ * logged-in users vote or edit their own tab.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PlaybackControls } from "../components/PlaybackControls";
+import { TabChords } from "../components/TabChords";
 import { TabRenderer } from "../components/TabRenderer";
 import { VoteButton } from "../components/VoteButton";
 import { useAuth } from "../hooks/useAuth";
@@ -15,7 +16,7 @@ import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
 import { Metronome } from "../lib/metronome";
 import { NOTES_PER_LINE } from "../lib/tabLayout";
-import { playOptionsFor } from "../lib/tabSettings";
+import { chordsUsed, playOptionsFor } from "../lib/tabSettings";
 import type { TabDetail, TabRevisionSummary, TuningOut } from "../types/api";
 
 export function TabViewPage() {
@@ -34,6 +35,8 @@ export function TabViewPage() {
   const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [scrollSpeed, setScrollSpeed] = useState(4);
+  // The chord whose diagram was last clicked in the tab.
+  const [highlightedChord, setHighlightedChord] = useState<string | null>(null);
 
   // Section loop/repeat: user picks a start/end note (by line number + note
   // number within that line) in the preview, then toggles loop mode so
@@ -337,6 +340,15 @@ export function TabViewPage() {
         barsPerLine={tab.bars_per_line}
         clawhammerTiming={tab.clawhammer_timing}
         playingNoteId={playingNoteId}
+        onChordClick={setHighlightedChord}
+      />
+
+      <TabChords
+        chordNames={chordsUsed(tab.notes)}
+        tuning={tuning}
+        capoFret={tab.capo_fret}
+        fifthStringCapoFret={tab.fifth_string_capo_fret}
+        highlighted={highlightedChord}
       />
     </div>
   );

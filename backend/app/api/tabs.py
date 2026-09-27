@@ -58,6 +58,7 @@ _MAX_REVISIONS_PER_TAB = 50
 _MAX_CAPO_FRET = 12
 _VALID_BARS_PER_LINE = {1, 2, 4}
 TIME_SIGNATURES = {"2/4", "3/4", "4/4", "6/8"}
+_MAX_CHORD_NAME_LENGTH = 16
 
 
 async def _get_or_create_anonymous_user(db: AsyncSession) -> User:
@@ -172,6 +173,8 @@ def _validate_notes(notes_in) -> None:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Note {i}: duration_beats must be positive.",
             )
+        if note.chord is not None and len(note.chord) > _MAX_CHORD_NAME_LENGTH:
+            raise _bad_request(f"Note {i}: chord names can be at most {_MAX_CHORD_NAME_LENGTH} characters.")
         if note.is_rest:
             if note.frets:
                 raise HTTPException(
@@ -271,6 +274,7 @@ async def _replace_notes(db: AsyncSession, tab: Tab, notes_in) -> None:
             dotted=note_in.dotted,
             triplet=note_in.triplet,
             tied=note_in.tied,
+            chord=note_in.chord or None,
         )
         db.add(note)
         await db.flush()
@@ -317,6 +321,7 @@ def _tab_as_request(tab: Tab) -> TabUpdateRequest:
                 dotted=n.dotted,
                 triplet=n.triplet,
                 tied=n.tied,
+                chord=n.chord,
                 frets=[
                     NoteFretIn(
                         string_number=f.string_number,

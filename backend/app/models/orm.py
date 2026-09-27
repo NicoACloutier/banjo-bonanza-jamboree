@@ -153,6 +153,8 @@ class Note(Base):
     # Tied to the previous note: strings it shares with the previous note (at
     # the same fret) keep ringing instead of being picked again.
     tied: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Chord name shown above this note (e.g. "G", "D7", "Am").
+    chord: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     tab: Mapped[Tab] = relationship(back_populates="notes")
     lyric: Mapped["Lyric | None"] = relationship(back_populates="note", uselist=False)

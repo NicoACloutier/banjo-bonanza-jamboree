@@ -3,7 +3,7 @@
  * capo), shared by the editor and viewer.
  */
 import type { PlayOptions } from "./playbackEngine";
-import type { TabSettings, TimeSignature } from "../types/api";
+import type { NoteOut, TabSettings, TimeSignature } from "../types/api";
 
 export const TIME_SIGNATURES: TimeSignature[] = ["4/4", "3/4", "2/4", "6/8"];
 
@@ -31,4 +31,13 @@ export function playOptionsFor(
     clawhammerTiming: tab.clawhammer_timing,
     swing: tab.swing,
   };
+}
+
+/** Distinct chord names used in a tab, in order of first appearance. */
+export function chordsUsed(notes: NoteOut[]): string[] {
+  const names: string[] = [];
+  for (const note of [...notes].sort((a, b) => a.position - b.position)) {
+    if (note.chord && !names.includes(note.chord)) names.push(note.chord);
+  }
+  return names;
 }

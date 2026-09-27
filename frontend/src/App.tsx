@@ -6,6 +6,7 @@
  */
 import { Route, Routes } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
+import { ChordsPage } from "./pages/ChordsPage";
 import { GoogleCallbackPage } from "./pages/GoogleCallbackPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/tabs/:tabId/edit" element={<TabEditorPage />} />
         <Route path="/users/:username" element={<UserProfilePage />} />
         <Route path="/tuner" element={<TunerPage />} />
+        <Route path="/chords" element={<ChordsPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />

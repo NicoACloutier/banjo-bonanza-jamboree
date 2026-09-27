@@ -47,6 +47,7 @@ def note_to_out(note: Note) -> NoteOut:
         dotted=note.dotted,
         triplet=note.triplet,
         tied=note.tied,
+        chord=note.chord,
         frets=[note_fret_to_out(f) for f in sorted(note.frets, key=lambda f: f.string_number)],
     )
 
@@ -116,6 +117,7 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
             dotted=n.dotted,
             triplet=n.triplet,
             tied=n.tied,
+            chord=n.chord,
             frets=[
                 NoteFretOut(
                     string_number=f.string_number,
