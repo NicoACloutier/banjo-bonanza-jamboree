@@ -6,6 +6,7 @@
  */
 import { Route, Routes } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
+import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { ChordsPage } from "./pages/ChordsPage";
 import { FavoritesPage } from "./pages/FavoritesPage";
 import { GoogleCallbackPage } from "./pages/GoogleCallbackPage";
@@ -20,9 +21,16 @@ import { TunerPage } from "./pages/TunerPage";
 import { UserProfilePage } from "./pages/UserProfilePage";
 
 export default function App() {
+  const online = useOnlineStatus();
   return (
     <div className="app-shell">
       <Navbar />
+      {!online && (
+        <p className="offline-banner" role="status">
+          You're offline. Tabs you've opened before (and saved setlists) still work; saving and searching
+          need a connection.
+        </p>
+      )}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/tabs/new" element={<TabEditorPage />} />

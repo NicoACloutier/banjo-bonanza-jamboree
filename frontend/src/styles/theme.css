@@ -503,11 +503,30 @@ label select {
 }
 
 /* ---- Mobile-responsive layout ----
-   Per product requirements, only *viewing/playing* a tab needs to be
-   usable on small screens; the tab-creation editor remains desktop-first. */
+   Phones: toolbars stack, tab cells are narrower but taller (easier to tap),
+   and the editor's note panel moves below the tab instead of beside it. */
 @media (max-width: 640px) {
   .app-shell {
     padding: 0.75rem 0.5rem 2rem;
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  }
+
+  .tab-with-editor {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tab-fret-cell {
+    height: 2rem;
+  }
+
+  .tab-list-item {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .navbar .brand {
+    font-size: 1.1rem;
   }
 
   .toolbar {
@@ -666,6 +685,16 @@ label select {
 
 .note-rhythm {
   align-items: flex-end;
+}
+
+.offline-banner {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid var(--wood-dark);
+  border-radius: 4px;
+  background: var(--gold);
+  color: var(--ink);
+  font-weight: bold;
 }
 
 .tag {

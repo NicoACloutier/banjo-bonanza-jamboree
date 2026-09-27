@@ -2,7 +2,7 @@
  * View + play a single tab: renders the tab sheet and its chord diagrams,
  * provides playback controls (tempo/transpose/auto-scroll), and lets
  * logged-in users vote, favorite, fork, add it to a setlist, or edit their
- * own tab.
+ * own tab. "Keep screen on" stops a phone sleeping while it's being read.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -12,6 +12,7 @@ import { TabLibraryActions } from "../components/TabLibraryActions";
 import { TabRenderer } from "../components/TabRenderer";
 import { VoteButton } from "../components/VoteButton";
 import { useAuth } from "../hooks/useAuth";
+import { useWakeLock, wakeLockSupported } from "../hooks/useWakeLock";
 import { TabsApi } from "../lib/api";
 import { ApiRequestError } from "../lib/apiClient";
 import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
@@ -37,6 +38,8 @@ export function TabViewPage() {
   const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [scrollSpeed, setScrollSpeed] = useState(4);
+  const [keepScreenOn, setKeepScreenOn] = useState(false);
+  useWakeLock(keepScreenOn);
   // The chord whose diagram was last clicked in the tab.
   const [highlightedChord, setHighlightedChord] = useState<string | null>(null);
 
@@ -229,6 +232,12 @@ export function TabViewPage() {
         <button className="secondary" onClick={() => window.print()}>
           Print / PDF
         </button>
+        {wakeLockSupported && (
+          <label className="checkbox-label">
+            <input type="checkbox" checked={keepScreenOn} onChange={(e) => setKeepScreenOn(e.target.checked)} />
+            Keep screen on
+          </label>
+        )}
       </div>
       {user && (
         <TabLibraryActions

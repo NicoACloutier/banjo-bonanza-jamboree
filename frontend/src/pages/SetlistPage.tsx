@@ -1,12 +1,13 @@
 /**
  * One of the user's setlists: its tabs in order, with controls to reorder,
- * remove, rename or delete.
+ * remove, rename or delete, and to save every tab in it for offline use.
  */
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { TabList } from "../components/TabList";
 import { LibraryApi } from "../lib/api";
 import { ApiRequestError } from "../lib/apiClient";
+import { offlineCachingAvailable, saveTabsForOffline } from "../lib/offline";
 import type { SetlistDetail } from "../types/api";
 
 const message = (err: unknown, fallback: string) => (err instanceof ApiRequestError ? err.message : fallback);
@@ -17,6 +18,7 @@ export function SetlistPage() {
   const [setlist, setSetlist] = useState<SetlistDetail | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
@@ -52,6 +54,16 @@ export function SetlistPage() {
     void save(setlist.name, next);
   };
 
+  const saveOffline = async () => {
+    setStatus("Saving...");
+    const saved = await saveTabsForOffline(ids);
+    setStatus(
+      offlineCachingAvailable()
+        ? `Saved ${saved} of ${ids.length} tabs for offline use.`
+        : "Loaded the tabs, but offline saving only works in the installed app (production build).",
+    );
+  };
+
   return (
     <div className="panel">
       <p className="muted-text">
@@ -75,6 +87,9 @@ export function SetlistPage() {
       {error && <p className="error-banner">{error}</p>}
 
       <div className="toolbar">
+        <button type="button" className="secondary" disabled={ids.length === 0} onClick={saveOffline}>
+          Save for offline
+        </button>
         {confirmingDelete ? (
           <>
             <span>Delete "{setlist.name}"? (The tabs themselves stay.)</span>
@@ -96,6 +111,11 @@ export function SetlistPage() {
           <button type="button" className="secondary" onClick={() => setConfirmingDelete(true)}>
             Delete setlist
           </button>
+        )}
+        {status && (
+          <span className="muted-text" role="status">
+            {status}
+          </span>
         )}
       </div>
 

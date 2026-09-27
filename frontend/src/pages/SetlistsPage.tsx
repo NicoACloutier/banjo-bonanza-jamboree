@@ -46,7 +46,8 @@ export function SetlistsPage() {
     <div className="panel">
       <h1>Setlists</h1>
       <p className="muted-text">
-        Group tabs you want to play together, in order. Add tabs from any tab's page.
+        Group tabs you want to play together, in order. Add tabs from any tab's page, and save a setlist
+        for offline use before heading somewhere without signal.
       </p>
       {error && <p className="error-banner">{error}</p>}
       <form className="toolbar" onSubmit={create}>

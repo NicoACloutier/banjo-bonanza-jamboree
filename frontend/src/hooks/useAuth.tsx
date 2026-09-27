@@ -6,6 +6,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { AuthApi } from "../lib/api";
 import { clearTokens, getAccessToken, storeTokens } from "../lib/apiClient";
+import { clearCachedApiData } from "../lib/offline";
 import type { UserPublic } from "../types/api";
 
 interface AuthContextValue {
@@ -70,6 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearTokens();
+    // Don't leave this user's cached setlists/favorites on the device.
+    void clearCachedApiData();
     setUser(null);
   }, []);
 
