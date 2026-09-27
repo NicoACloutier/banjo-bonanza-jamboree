@@ -67,7 +67,11 @@ describe("TabViewPage auto-scroll", () => {
       </MemoryRouter>,
     );
 
-    await user.click(await screen.findByRole("button", { name: /play/i }));
+    // Auto-scroll is off by default; turn it on.
+    const autoScroll = await screen.findByRole("checkbox", { name: /auto-scroll/i });
+    expect(autoScroll).not.toBeChecked();
+    await user.click(autoScroll);
+    await user.click(screen.getByRole("button", { name: /play/i }));
     await waitFor(() => expect(scrollBy).toHaveBeenCalled(), { timeout: 1000 });
 
     await user.click(screen.getByRole("link", { name: "Browse" }));

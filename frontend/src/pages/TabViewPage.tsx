@@ -2,9 +2,9 @@
  * View + play a single tab: renders the tab sheet and its chord diagrams,
  * provides playback controls (tempo/transpose/auto-scroll), and lets
  * logged-in users vote, favorite, fork, add it to a setlist, or edit their
- * own tab. "Keep screen on" stops a phone sleeping while it's being read.
+ * own tab.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PlaybackControls } from "../components/PlaybackControls";
 import { TabChords } from "../components/TabChords";
@@ -12,7 +12,6 @@ import { TabLibraryActions } from "../components/TabLibraryActions";
 import { TabRenderer } from "../components/TabRenderer";
 import { VoteButton } from "../components/VoteButton";
 import { useAuth } from "../hooks/useAuth";
-import { useWakeLock, wakeLockSupported } from "../hooks/useWakeLock";
 import { TabsApi } from "../lib/api";
 import { ApiRequestError } from "../lib/apiClient";
 import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
@@ -41,10 +40,8 @@ export function TabViewPage() {
   const [transposeSemitones, setTransposeSemitones] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(false);
   const [scrollSpeed, setScrollSpeed] = useState(4);
-  const [keepScreenOn, setKeepScreenOn] = useState(false);
-  useWakeLock(keepScreenOn);
   // The chord whose diagram was last clicked in the tab.
   const [highlightedChord, setHighlightedChord] = useState<string | null>(null);
 
@@ -200,6 +197,20 @@ export function TabViewPage() {
 
   const isOwner = user?.id === tab.owner_id;
 
+  // The tab's details line, shown with " · " between whichever items apply.
+  const details: ReactNode[] = [
+    tab.artist && `by ${tab.artist}`,
+    tab.album,
+    `Tuning: ${tuning.display_name}`,
+    tab.capo_fret > 0 &&
+      `Capo: fret ${tab.capo_fret}${tab.fifth_string_capo_fret === 0 ? " (5th string open)" : ""}`,
+    !!tab.fifth_string_capo_fret && `5th-string capo: fret ${tab.fifth_string_capo_fret}`,
+    tab.clawhammer_timing && "Clawhammer",
+    <>
+      By <Link to={`/users/${tab.owner_username}`}>{tab.owner_username}</Link>
+    </>,
+  ].filter(Boolean);
+
   const lines = linesOf(tab);
   const totalLines = Math.max(1, lines.length);
   const notesInLine = (lineIdx: number) => lines[lineIdx]?.length ?? 0;
@@ -209,17 +220,26 @@ export function TabViewPage() {
   return (
     <div className="panel tab-view-page">
       <h1>{tab.song_name}</h1>
-      <p className="muted-text">
-        {tab.artist && <>by {tab.artist} </>}
-        {tab.album && <>· {tab.album} </>}
-        · Tuning: {tuning.display_name}
-        {tab.capo_fret > 0 && <> · Capo: fret {tab.capo_fret}</>}
-        {tab.fifth_string_capo_fret === 0 && tab.capo_fret > 0 && <> (5th string open)</>}
-        {!!tab.fifth_string_capo_fret && <> · 5th-string capo: fret {tab.fifth_string_capo_fret}</>}
-        {tab.clawhammer_timing && <> · Clawhammer</>} · By{" "}
-        <Link to={`/users/${tab.owner_username}`}>{tab.owner_username}</Link>
-        {tab.status === "draft" && <span className="tag">DRAFT</span>}
-      </p>
+      <div className="tab-meta">
+        <p className="muted-text">
+          {details.map((detail, i) => (
+            <Fragment key={i}>
+              {i > 0 && " · "}
+              {detail}
+            </Fragment>
+          ))}
+          {tab.status === "draft" && <span className="tag">DRAFT</span>}
+        </p>
+        <div className="tab-meta-actions no-print">
+          <VoteButton voteCount={tab.vote_count} hasVoted={tab.has_voted} onVote={handleVote} />
+          {isOwner && <button onClick={() => navigate(`/tabs/${tab.id}/edit`)}>Edit</button>}
+          {isOwner && (
+            <button className="secondary" onClick={loadRevisions}>
+              History
+            </button>
+          )}
+        </div>
+      </div>
       <div className="tag-row">
         {tab.time_signature && <span className="tag">{tab.time_signature}</span>}
         {tab.swing && <span className="tag">Swing</span>}
@@ -234,20 +254,6 @@ export function TabViewPage() {
         </p>
       )}
 
-      <div className="toolbar no-print">
-        <VoteButton voteCount={tab.vote_count} hasVoted={tab.has_voted} onVote={handleVote} />
-        {isOwner && <button onClick={() => navigate(`/tabs/${tab.id}/edit`)}>Edit</button>}
-        {isOwner && <button className="secondary" onClick={loadRevisions}>History</button>}
-        <button className="secondary" onClick={() => window.print()}>
-          Print / PDF
-        </button>
-        {wakeLockSupported && (
-          <label className="checkbox-label">
-            <input type="checkbox" checked={keepScreenOn} onChange={(e) => setKeepScreenOn(e.target.checked)} />
-            Keep screen on
-          </label>
-        )}
-      </div>
       {user && (
         <TabLibraryActions
           tab={tab}
