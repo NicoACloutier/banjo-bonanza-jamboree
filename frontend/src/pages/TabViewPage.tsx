@@ -92,6 +92,13 @@ export function TabViewPage() {
     return () => {
       engineRef.current?.dispose();
       metronomeRef.current?.dispose();
+      // Leaving the page stops playback, so stop auto-scrolling too (disposing
+      // the engine doesn't fire onEnded, and the interval would otherwise keep
+      // scrolling whatever page the user navigated to).
+      if (scrollIntervalRef.current !== null) {
+        window.clearInterval(scrollIntervalRef.current);
+        scrollIntervalRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
