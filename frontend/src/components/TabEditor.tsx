@@ -43,7 +43,7 @@ export interface TabMetadata {
   barsPerLine: number;
   /** Clawhammer mode: notes can add a 5th-string thumb pluck after them (`thumb_after`). */
   clawhammerTiming: boolean;
-  /** Time signature, swing and 5th-string capo. */
+  /** Time signature, swing, 5th-string capo, style, key and difficulty. */
   settings: TabSettings;
 }
 

@@ -622,11 +622,28 @@ label select {
   color: var(--ember-dark);
 }
 
+.tab-list-side {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .tag-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
   margin: 0.25rem 0;
+}
+
+/* Small groups of controls that stay on one line inside a toolbar. */
+.inline-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.inline-controls select {
+  width: auto;
 }
 
 /* A chord diagram picked from the tab (by clicking its name). */

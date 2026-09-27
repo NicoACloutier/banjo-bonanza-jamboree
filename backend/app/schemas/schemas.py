@@ -164,6 +164,10 @@ class TabCreateRequest(msgspec.Struct):
     swing: bool = False
     # 5th-string capo fret (6-12); None = match the main capo; 0 = open.
     fifth_string_capo_fret: int | None = None
+    # Optional library metadata.
+    style: str | None = None
+    song_key: str | None = None
+    difficulty: str | None = None
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
 
@@ -180,6 +184,9 @@ class TabUpdateRequest(msgspec.Struct):
     time_signature: str | None = None
     swing: bool = False
     fifth_string_capo_fret: int | None = None
+    style: str | None = None
+    song_key: str | None = None
+    difficulty: str | None = None
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
 
@@ -197,6 +204,9 @@ class TabSummary(msgspec.Struct):
     owner_username: str
     created_at: datetime
     updated_at: datetime
+    style: str | None = None
+    song_key: str | None = None
+    difficulty: str | None = None
 
 
 class TabDetail(msgspec.Struct):
@@ -222,6 +232,19 @@ class TabDetail(msgspec.Struct):
     time_signature: str | None = None
     swing: bool = False
     fifth_string_capo_fret: int | None = None
+    style: str | None = None
+    song_key: str | None = None
+    difficulty: str | None = None
+    is_favorited: bool = False
+    forked_from: "ForkSource | None" = None
+
+
+class ForkSource(msgspec.Struct):
+    """The tab a fork was copied from (for a "forked from" link)."""
+
+    id: str
+    song_name: str
+    owner_username: str
 
 
 class TabListResponse(msgspec.Struct):
@@ -280,3 +303,44 @@ class TabRevisionDetail(msgspec.Struct):
     time_signature: str | None = None
     swing: bool = False
     fifth_string_capo_fret: int | None = None
+    style: str | None = None
+    song_key: str | None = None
+    difficulty: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Favorites / setlists
+# ---------------------------------------------------------------------------
+
+
+class FavoriteResponse(msgspec.Struct):
+    tab_id: str
+    is_favorited: bool
+
+
+class SetlistCreateRequest(msgspec.Struct):
+    name: str
+
+
+class SetlistUpdateRequest(msgspec.Struct):
+    name: str
+    # The setlist's full, ordered contents (replaces the existing items).
+    tab_ids: list[str] = msgspec.field(default_factory=list)
+
+
+class SetlistAddTabRequest(msgspec.Struct):
+    tab_id: str
+
+
+class SetlistSummary(msgspec.Struct):
+    id: str
+    name: str
+    tab_count: int
+    updated_at: datetime
+
+
+class SetlistDetail(msgspec.Struct):
+    id: str
+    name: str
+    updated_at: datetime
+    tabs: list[TabSummary]

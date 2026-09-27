@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import msgspec
 
-from app.models.orm import Note, NoteFret, RightHandFinger, Tab, TabRevision, User
+from app.models.orm import Note, NoteFret, RightHandFinger, Setlist, Tab, TabRevision, User
 from app.schemas.schemas import (
+    ForkSource,
     NoteFretOut,
     NoteIn,
     NoteOut,
     RightHandFingerOut,
+    SetlistSummary,
     TabDetail,
     TabRevisionDetail,
     TabRevisionSummary,
@@ -64,10 +66,15 @@ def tab_to_summary(tab: Tab, vote_count: int) -> TabSummary:
         owner_username=tab.owner.username,
         created_at=tab.created_at,
         updated_at=tab.updated_at,
+        style=tab.style,
+        song_key=tab.song_key,
+        difficulty=tab.difficulty,
     )
 
 
-def tab_to_detail(tab: Tab, vote_count: int, has_voted: bool) -> TabDetail:
+def tab_to_detail(tab: Tab, vote_count: int, has_voted: bool, is_favorited: bool = False) -> TabDetail:
+    """`tab.forked_from` (and its owner) must be eager-loaded."""
+    source = tab.forked_from
     return TabDetail(
         id=tab.id,
         song_name=tab.song_name,
@@ -89,6 +96,15 @@ def tab_to_detail(tab: Tab, vote_count: int, has_voted: bool) -> TabDetail:
         time_signature=tab.time_signature,
         swing=tab.swing,
         fifth_string_capo_fret=tab.fifth_string_capo_fret,
+        style=tab.style,
+        song_key=tab.song_key,
+        difficulty=tab.difficulty,
+        is_favorited=is_favorited,
+        forked_from=(
+            ForkSource(id=source.id, song_name=source.song_name, owner_username=source.owner.username)
+            if source is not None
+            else None
+        ),
     )
 
 
@@ -148,4 +164,14 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
         time_signature=snapshot.get("time_signature"),
         swing=snapshot.get("swing", False),
         fifth_string_capo_fret=snapshot.get("fifth_string_capo_fret"),
+        style=snapshot.get("style"),
+        song_key=snapshot.get("song_key"),
+        difficulty=snapshot.get("difficulty"),
+    )
+
+
+def setlist_to_summary(setlist: Setlist) -> SetlistSummary:
+    """`setlist.items` must be eager-loaded."""
+    return SetlistSummary(
+        id=setlist.id, name=setlist.name, tab_count=len(setlist.items), updated_at=setlist.updated_at
     )

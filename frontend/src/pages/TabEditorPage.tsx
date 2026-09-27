@@ -88,6 +88,9 @@ export function TabEditorPage() {
             time_signature: tab.time_signature,
             swing: tab.swing,
             fifth_string_capo_fret: tab.fifth_string_capo_fret,
+            style: tab.style,
+            song_key: tab.song_key,
+            difficulty: tab.difficulty,
           },
         });
         setNotes(tab.notes);

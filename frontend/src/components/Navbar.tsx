@@ -21,6 +21,8 @@ export function Navbar() {
         <Link to="/chords">Chords</Link>
         {user ? (
           <>
+            <Link to="/favorites">Favorites</Link>
+            <Link to="/setlists">Setlists</Link>
             <Link to={`/users/${user.username}`}>My Tabs ({user.username})</Link>
             <button className="secondary" onClick={logout}>
               Log out

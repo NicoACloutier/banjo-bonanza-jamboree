@@ -1,12 +1,14 @@
 /**
  * View + play a single tab: renders the tab sheet and its chord diagrams,
  * provides playback controls (tempo/transpose/auto-scroll), and lets
- * logged-in users vote or edit their own tab.
+ * logged-in users vote, favorite, fork, add it to a setlist, or edit their
+ * own tab.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PlaybackControls } from "../components/PlaybackControls";
 import { TabChords } from "../components/TabChords";
+import { TabLibraryActions } from "../components/TabLibraryActions";
 import { TabRenderer } from "../components/TabRenderer";
 import { VoteButton } from "../components/VoteButton";
 import { useAuth } from "../hooks/useAuth";
@@ -16,7 +18,7 @@ import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
 import { Metronome } from "../lib/metronome";
 import { NOTES_PER_LINE } from "../lib/tabLayout";
-import { chordsUsed, playOptionsFor } from "../lib/tabSettings";
+import { chordsUsed, DIFFICULTY_LABELS, playOptionsFor, STYLE_LABELS } from "../lib/tabSettings";
 import type { TabDetail, TabRevisionSummary, TuningOut } from "../types/api";
 
 export function TabViewPage() {
@@ -209,7 +211,16 @@ export function TabViewPage() {
       <div className="tag-row">
         {tab.time_signature && <span className="tag">{tab.time_signature}</span>}
         {tab.swing && <span className="tag">Swing</span>}
+        {tab.song_key && <span className="tag">Key of {tab.song_key}</span>}
+        {tab.style && <span className="tag">{STYLE_LABELS[tab.style]}</span>}
+        {tab.difficulty && <span className="tag">{DIFFICULTY_LABELS[tab.difficulty]}</span>}
       </div>
+      {tab.forked_from && (
+        <p className="muted-text">
+          Forked from <Link to={`/tabs/${tab.forked_from.id}`}>{tab.forked_from.song_name}</Link> by{" "}
+          {tab.forked_from.owner_username}
+        </p>
+      )}
 
       <div className="toolbar no-print">
         <VoteButton voteCount={tab.vote_count} hasVoted={tab.has_voted} onVote={handleVote} />
@@ -219,6 +230,12 @@ export function TabViewPage() {
           Print / PDF
         </button>
       </div>
+      {user && (
+        <TabLibraryActions
+          tab={tab}
+          onFavoriteChange={(isFavorited) => setTab({ ...tab, is_favorited: isFavorited })}
+        />
+      )}
 
       {showRevisions && (
         <div className="panel no-print">

@@ -7,10 +7,13 @@
 import { Route, Routes } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
 import { ChordsPage } from "./pages/ChordsPage";
+import { FavoritesPage } from "./pages/FavoritesPage";
 import { GoogleCallbackPage } from "./pages/GoogleCallbackPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { SetlistPage } from "./pages/SetlistPage";
+import { SetlistsPage } from "./pages/SetlistsPage";
 import { TabEditorPage } from "./pages/TabEditorPage";
 import { TabViewPage } from "./pages/TabViewPage";
 import { TunerPage } from "./pages/TunerPage";
@@ -28,6 +31,9 @@ export default function App() {
         <Route path="/users/:username" element={<UserProfilePage />} />
         <Route path="/tuner" element={<TunerPage />} />
         <Route path="/chords" element={<ChordsPage />} />
+        <Route path="/favorites" element={<FavoritesPage />} />
+        <Route path="/setlists" element={<SetlistsPage />} />
+        <Route path="/setlists/:setlistId" element={<SetlistPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />

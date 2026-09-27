@@ -3,7 +3,8 @@
  * you're viewing your own profile while logged in).
  */
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { TabList } from "../components/TabList";
 import { UsersApi } from "../lib/api";
 import { ApiRequestError } from "../lib/apiClient";
 import type { TabListResponse, UserPublic } from "../types/api";
@@ -30,20 +31,7 @@ export function UserProfilePage() {
   return (
     <div className="panel">
       <h1>{user.username}'s Tabs</h1>
-      <ul className="tab-list">
-        {tabs?.items.map((tab) => (
-          <li className="tab-list-item" key={tab.id}>
-            <div>
-              <Link to={`/tabs/${tab.id}`}>
-                <strong>{tab.song_name}</strong>
-              </Link>
-              {tab.status === "draft" && <span className="tag">DRAFT</span>}
-            </div>
-            <span className="vote-count">👍 {tab.vote_count}</span>
-          </li>
-        ))}
-        {tabs?.items.length === 0 && <p>No tabs published yet.</p>}
-      </ul>
+      {tabs && <TabList tabs={tabs.items} showOwner={false} emptyMessage="No tabs published yet." />}
     </div>
   );
 }

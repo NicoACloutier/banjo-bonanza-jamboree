@@ -84,6 +84,8 @@ export interface NoteOut {
 }
 
 export type TimeSignature = "2/4" | "3/4" | "4/4" | "6/8";
+export type TabStyle = "scruggs" | "clawhammer" | "melodic" | "single_string" | "old_time" | "other";
+export type Difficulty = "beginner" | "intermediate" | "advanced";
 
 /** Tab-level settings shared by create/update requests, tab details and revisions. */
 export interface TabSettings {
@@ -93,6 +95,10 @@ export interface TabSettings {
   swing: boolean;
   /** 5th-string capo fret (6-12); null = match the main capo; 0 = the 5th string stays open. */
   fifth_string_capo_fret: number | null;
+  style: TabStyle | null;
+  /** The song's key, e.g. "G", "Bb", "F#m". */
+  song_key: string | null;
+  difficulty: Difficulty | null;
 }
 
 export interface TabCreateRequest extends TabSettings {
@@ -124,6 +130,16 @@ export interface TabSummary {
   owner_username: string;
   created_at: string;
   updated_at: string;
+  style: TabStyle | null;
+  song_key: string | null;
+  difficulty: Difficulty | null;
+}
+
+/** The tab a fork was copied from. */
+export interface ForkSource {
+  id: string;
+  song_name: string;
+  owner_username: string;
 }
 
 export interface TabDetail extends TabSettings {
@@ -141,6 +157,8 @@ export interface TabDetail extends TabSettings {
   owner_id: string;
   owner_username: string;
   has_voted: boolean;
+  is_favorited: boolean;
+  forked_from: ForkSource | null;
   created_at: string;
   updated_at: string;
   notes: NoteOut[];
@@ -192,4 +210,32 @@ export interface TabRevisionDetail extends TabSettings {
   bars_per_line: number;
   clawhammer_timing: boolean;
   notes: NoteOut[];
+}
+
+export interface FavoriteResponse {
+  tab_id: string;
+  is_favorited: boolean;
+}
+
+export interface SetlistSummary {
+  id: string;
+  name: string;
+  tab_count: number;
+  updated_at: string;
+}
+
+export interface SetlistDetail {
+  id: string;
+  name: string;
+  updated_at: string;
+  tabs: TabSummary[];
+}
+
+/** Optional filters for browsing/searching published tabs. */
+export interface TabSearchFilters {
+  q?: string;
+  style?: TabStyle;
+  difficulty?: Difficulty;
+  tuning?: string;
+  song_key?: string;
 }

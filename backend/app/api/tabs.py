@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import msgspec
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
@@ -14,6 +16,7 @@ from app.core.deps import ANONYMOUS_USERNAME, get_current_user, get_optional_use
 from app.core.msgspec_utils import MsgspecResponse, parse_json_body
 from app.core.tunings import TUNINGS, get_tuning
 from app.models.orm import (
+    Favorite,
     Lyric,
     Note,
     NoteFret,
@@ -29,6 +32,7 @@ from app.schemas.schemas import (
     NoteFretIn,
     NoteIn,
     RightHandFingerOut,
+    FavoriteResponse,
     TabCreateRequest,
     TabDetail,
     TabListResponse,
@@ -52,12 +56,17 @@ _TAB_LOAD_OPTIONS = (
     selectinload(Tab.owner),
     selectinload(Tab.notes).selectinload(Note.lyric),
     selectinload(Tab.notes).selectinload(Note.frets),
+    selectinload(Tab.forked_from).selectinload(Tab.owner),
 )
 
 _MAX_REVISIONS_PER_TAB = 50
 _MAX_CAPO_FRET = 12
 _VALID_BARS_PER_LINE = {1, 2, 4}
 TIME_SIGNATURES = {"2/4", "3/4", "4/4", "6/8"}
+STYLES = {"scruggs", "clawhammer", "melodic", "single_string", "old_time", "other"}
+DIFFICULTIES = {"beginner", "intermediate", "advanced"}
+# A key is a tonic, optionally sharp/flat, optionally minor: "G", "Bb", "F#m".
+_KEY_PATTERN = re.compile(r"^[A-G][#b]?m?$")
 _MAX_CHORD_NAME_LENGTH = 16
 
 
@@ -85,6 +94,13 @@ async def _has_voted(db: AsyncSession, tab_id: str, user_id: str | None) -> bool
     return result.scalar_one_or_none() is not None
 
 
+async def _is_favorited(db: AsyncSession, tab_id: str, user_id: str | None) -> bool:
+    if not user_id:
+        return False
+    result = await db.execute(select(Favorite.id).where(Favorite.tab_id == tab_id, Favorite.user_id == user_id))
+    return result.scalar_one_or_none() is not None
+
+
 async def _load_tab(db: AsyncSession, tab_id: str) -> Tab | None:
     result = await db.execute(
         select(Tab).where(Tab.id == tab_id).options(*_TAB_LOAD_OPTIONS).execution_options(populate_existing=True)
@@ -101,6 +117,7 @@ async def _detail_response(
             tab,
             vote_count=await _vote_count(db, tab.id),
             has_voted=await _has_voted(db, tab.id, user_id),
+            is_favorited=await _is_favorited(db, tab.id, user_id),
         ),
         status_code=status_code,
     )
@@ -141,6 +158,12 @@ def _validate_tab_request(body: TabCreateRequest | TabUpdateRequest) -> None:
     fifth = body.fifth_string_capo_fret
     if fifth is not None and fifth != 0 and not (6 <= fifth <= _MAX_CAPO_FRET):
         raise _bad_request(f"fifth_string_capo_fret must be 0 (open) or between 6 and {_MAX_CAPO_FRET}.")
+    if body.style is not None and body.style not in STYLES:
+        raise _bad_request(f"style must be one of {sorted(STYLES)}.")
+    if body.song_key is not None and not _KEY_PATTERN.match(body.song_key):
+        raise _bad_request('song_key must look like "G", "Bb" or "F#m".')
+    if body.difficulty is not None and body.difficulty not in DIFFICULTIES:
+        raise _bad_request(f"difficulty must be one of {sorted(DIFFICULTIES)}.")
     _validate_notes(body.notes)
 
 
@@ -157,6 +180,9 @@ def _apply_tab_request(tab: Tab, body: TabCreateRequest | TabUpdateRequest) -> N
     tab.time_signature = body.time_signature
     tab.swing = body.swing
     tab.fifth_string_capo_fret = body.fifth_string_capo_fret
+    tab.style = body.style
+    tab.song_key = body.song_key
+    tab.difficulty = body.difficulty
     tab.status = TabStatus.published if body.publish else TabStatus.draft
 
 
@@ -310,6 +336,9 @@ def _tab_as_request(tab: Tab) -> TabUpdateRequest:
         time_signature=tab.time_signature,
         swing=tab.swing,
         fifth_string_capo_fret=tab.fifth_string_capo_fret,
+        style=tab.style,
+        song_key=tab.song_key,
+        difficulty=tab.difficulty,
         notes=[
             NoteIn(
                 position=n.position,
@@ -398,14 +427,26 @@ async def create_tab(
 @router.get("")
 async def search_tabs(
     q: str | None = Query(default=None, description="Search text for song name"),
+    style: str | None = Query(default=None),
+    difficulty: str | None = Query(default=None),
+    tuning: str | None = Query(default=None, description="Tuning key, e.g. standard_g"),
+    song_key: str | None = Query(default=None, description='Song key, e.g. "G" or "Am"'),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ) -> MsgspecResponse:
-    """Search published tabs by song name, sorted by vote count (descending)."""
+    """Search published tabs by song name (and optional filters), sorted by vote count (descending)."""
     filters = [Tab.status == TabStatus.published]
     if q:
         filters.append(Tab.song_name.ilike(f"%{q}%"))
+    if style:
+        filters.append(Tab.style == style)
+    if difficulty:
+        filters.append(Tab.difficulty == difficulty)
+    if tuning:
+        filters.append(Tab.tuning_key == tuning)
+    if song_key:
+        filters.append(Tab.song_key == song_key)
 
     vote_count_subq = (
         select(Vote.tab_id, func.count().label("vote_count")).group_by(Vote.tab_id).subquery()
@@ -620,3 +661,49 @@ async def vote_tab(
 
     votes = await _vote_count(db, tab_id)
     return MsgspecResponse(VoteResponse(tab_id=tab_id, vote_count=votes, has_voted=has_voted))
+
+
+@router.post("/{tab_id}/favorite")
+async def favorite_tab(
+    tab_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> MsgspecResponse:
+    """Toggle the current user's favorite (bookmark) on a tab they can see."""
+    tab = (await db.execute(select(Tab).where(Tab.id == tab_id))).scalar_one_or_none()
+    if tab is None or (tab.status != TabStatus.published and tab.owner_id != user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tab not found.")
+
+    existing = (
+        await db.execute(select(Favorite).where(Favorite.tab_id == tab_id, Favorite.user_id == user.id))
+    ).scalar_one_or_none()
+    if existing is not None:
+        await db.delete(existing)
+        await db.commit()
+        return MsgspecResponse(FavoriteResponse(tab_id=tab_id, is_favorited=False))
+    db.add(Favorite(tab_id=tab_id, user_id=user.id))
+    try:
+        await db.commit()
+    except IntegrityError:
+        # A concurrent request already favorited it (see vote_tab).
+        await db.rollback()
+    return MsgspecResponse(FavoriteResponse(tab_id=tab_id, is_favorited=True))
+
+
+@router.post("/{tab_id}/fork")
+async def fork_tab(
+    tab_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> MsgspecResponse:
+    """Copy a tab (published, or the caller's own) into a new draft owned by the caller."""
+    source = await _load_tab(db, tab_id)
+    if source is None or (source.status != TabStatus.published and source.owner_id != user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tab not found.")
+
+    copy = _tab_as_request(source)
+    copy.publish = False
+    fork = Tab(owner_id=user.id, forked_from_id=source.id)
+    _apply_tab_request(fork, copy)
+    db.add(fork)
+    await db.flush()
+    await _replace_notes(db, fork, copy.notes)
+    await db.commit()
+
+    return await _detail_response(db, await _load_tab(db, fork.id), user, status_code=status.HTTP_201_CREATED)
