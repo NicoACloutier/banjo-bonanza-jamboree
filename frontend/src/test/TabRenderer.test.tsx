@@ -234,13 +234,4 @@ describe("TabRenderer", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "G" }));
     expect(onChordClick).toHaveBeenCalledWith("G");
   });
-
-  it("puts bar lines at measure boundaries for the time signature", () => {
-    const notes = [0, 1, 2, 3, 4, 5].map((i) => makeNote({ id: `n${i}`, position: i }));
-    const { container } = render(<TabRenderer notes={notes} timeSignature="3/4" />);
-    const firstString = container.querySelectorAll(".tab-string-row")[0].querySelectorAll(".tab-fret-cell");
-    expect(Array.from(firstString).map((c) => c.classList.contains("bar-break"))).toEqual([
-      false, false, false, true, false, false,
-    ]);
-  });
 });

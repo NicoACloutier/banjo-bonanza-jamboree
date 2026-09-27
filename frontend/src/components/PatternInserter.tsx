@@ -37,31 +37,33 @@ export function PatternInserter({ tuning, capoFret, fifthStringCapoFret, hasSele
         Writes one bar of the pattern over the chord's easiest shape, starting at the selected note (or at the end).
       </p>
       <div className="pattern-inserter">
-        <div className="form-row">
-          <label>
-            Pattern
-            <select value={patternId} onChange={(e) => setPatternId(e.target.value)}>
-              {PATTERNS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Chord
-            <input type="text" value={chordName} maxLength={16} onChange={(e) => setChordName(e.target.value)} />
-          </label>
+        <div className="pattern-inserter-body">
+          <div className="pattern-inserter-fields">
+            <label>
+              Pattern
+              <select value={patternId} onChange={(e) => setPatternId(e.target.value)}>
+                {PATTERNS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Chord
+              <input type="text" value={chordName} maxLength={16} onChange={(e) => setChordName(e.target.value)} />
+            </label>
+          </div>
+          {preview && !(preview instanceof Error) && (
+            <div className="pattern-preview">
+              <ChordDiagram name={preview.notes[0].chord ?? chordName} shape={preview.shape} />
+              {preview.needsClawhammer && (
+                <p className="muted-text">This pattern turns on clawhammer mode for its 5th-string thumb plucks.</p>
+              )}
+            </div>
+          )}
         </div>
         {preview instanceof Error && <p className="error-banner">{preview.message}</p>}
-        {preview && !(preview instanceof Error) && (
-          <div className="pattern-preview">
-            <ChordDiagram name={preview.notes[0].chord ?? chordName} shape={preview.shape} />
-            {preview.needsClawhammer && (
-              <p className="muted-text">This pattern turns on clawhammer mode for its 5th-string thumb plucks.</p>
-            )}
-          </div>
-        )}
         <button
           type="button"
           className="secondary"

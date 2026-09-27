@@ -18,9 +18,14 @@ import { ApiRequestError } from "../lib/apiClient";
 import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
 import { Metronome } from "../lib/metronome";
-import { NOTES_PER_LINE } from "../lib/tabLayout";
+import { splitIntoLines } from "../lib/tabLayout";
 import { chordsUsed, DIFFICULTY_LABELS, playOptionsFor, STYLE_LABELS } from "../lib/tabSettings";
 import type { TabDetail, TabRevisionSummary, TuningOut } from "../types/api";
+
+/** A tab's lines, as the tab sheet lays them out (for the loop pickers). */
+function linesOf(tab: TabDetail) {
+  return splitIntoLines(tab.notes);
+}
 
 export function TabViewPage() {
   const { tabId } = useParams();
@@ -114,10 +119,9 @@ export function TabViewPage() {
 
   const handlePlay = () => {
     if (!tab || !tuning) return;
-    const loopStartNote =
-      loopStartLine !== null ? (tab.notes[loopStartLine * NOTES_PER_LINE + loopStartNoteInLine] ?? null) : null;
-    const loopEndNote =
-      loopEndLine !== null ? (tab.notes[loopEndLine * NOTES_PER_LINE + loopEndNoteInLine] ?? null) : null;
+    const lines = linesOf(tab);
+    const loopStartNote = loopStartLine !== null ? (lines[loopStartLine]?.[loopStartNoteInLine] ?? null) : null;
+    const loopEndNote = loopEndLine !== null ? (lines[loopEndLine]?.[loopEndNoteInLine] ?? null) : null;
     const loop =
       loopEnabled && loopStartNote && loopEndNote
         ? (() => {
@@ -196,13 +200,11 @@ export function TabViewPage() {
 
   const isOwner = user?.id === tab.owner_id;
 
-  const totalLines = Math.max(1, Math.ceil(tab.notes.length / NOTES_PER_LINE));
-  const notesInLine = (lineIdx: number) =>
-    Math.min(NOTES_PER_LINE, Math.max(0, tab.notes.length - lineIdx * NOTES_PER_LINE));
-  const loopStartNote =
-    loopStartLine !== null ? (tab.notes[loopStartLine * NOTES_PER_LINE + loopStartNoteInLine] ?? null) : null;
-  const loopEndNote =
-    loopEndLine !== null ? (tab.notes[loopEndLine * NOTES_PER_LINE + loopEndNoteInLine] ?? null) : null;
+  const lines = linesOf(tab);
+  const totalLines = Math.max(1, lines.length);
+  const notesInLine = (lineIdx: number) => lines[lineIdx]?.length ?? 0;
+  const loopStartNote = loopStartLine !== null ? (lines[loopStartLine]?.[loopStartNoteInLine] ?? null) : null;
+  const loopEndNote = loopEndLine !== null ? (lines[loopEndLine]?.[loopEndNoteInLine] ?? null) : null;
 
   return (
     <div className="panel tab-view-page">
@@ -369,7 +371,6 @@ export function TabViewPage() {
 
       <TabRenderer
         notes={tab.notes}
-        timeSignature={tab.time_signature}
         barsPerLine={tab.bars_per_line}
         clawhammerTiming={tab.clawhammer_timing}
         playingNoteId={playingNoteId}

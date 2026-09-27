@@ -51,9 +51,9 @@ body {
 }
 
 .app-shell {
-  max-width: 1080px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 1.25rem 1rem 3rem;
+  padding: 1.25rem 0.5rem 3rem;
 }
 
 /* Parchment "paper" panel used for cards, forms, and the tab sheet itself. */
@@ -64,7 +64,7 @@ body {
   border: 3px solid var(--wood-plank);
   border-radius: 4px;
   box-shadow: 0 6px 14px var(--shadow), inset 0 0 30px rgba(93, 64, 55, 0.15);
-  padding: 1.25rem 1.5rem;
+  padding: 1.25rem 1rem;
   margin-bottom: 1.5rem;
 }
 
@@ -219,17 +219,34 @@ label select {
 
 /* ---- Tab sheet rendering ---- */
 .tab-sheet {
-  /* Shared by every row of a tab line (duration markers, strings, lyrics)
-     so each note's column lines up exactly. */
+  /* Shared by every row of a tab line (duration markers, chords, strings,
+     lyrics) so each note's column lines up exactly. */
   --tab-label-width: 1.5rem;
-  --tab-cell-width: 2.6rem;
   --tab-cell-gap: 0.15rem;
+  --tab-cell-max: 2.6rem;
+  --tab-cell-min: 1.9rem;
+  /* Lets each line size its cells to the sheet's width (100cqw, below). */
+  container-type: inline-size;
   font-family: var(--font-body);
   overflow-x: auto;
 }
 
-/* Two-column layout for the editor: the tab preview (~3/4 width) beside the
-   "Edit selected note" panel (~1/4 width). The columns are siblings in one
+/* Cells shrink (down to --tab-cell-min) so the longest line fits the sheet
+   without a horizontal scrollbar, e.g. when the note editor panel takes up
+   part of the row. --line-notes and --line-bar-breaks (the longest line's
+   notes and bar lines, each bar line adding 0.5rem of margin -- see
+   .bar-break) are set by TabRenderer. Only below the minimum does it scroll. */
+.tab-line {
+  --tab-cell-width: clamp(
+    var(--tab-cell-min),
+    (100cqw - var(--tab-label-width) - var(--line-notes, 16) * var(--tab-cell-gap) - var(--line-bar-breaks, 3) * 0.5rem) /
+      var(--line-notes, 16),
+    var(--tab-cell-max)
+  );
+}
+
+/* Two-column layout for the editor: the tab preview (the rest of the width)
+   beside the fixed-width "Edit selected note" panel. The columns are siblings in one
    flex row, so every tab line keeps this same width -- including lines
    below the bottom of the (shorter) edit panel, which just leaves the area
    beside them blank rather than letting those lines stretch full-width. */
@@ -245,7 +262,7 @@ label select {
 }
 
 .tab-with-editor > .edit-note-col {
-  flex: 1 1 0%;
+  flex: 0 0 17rem;
   min-width: 0;
 }
 
@@ -502,6 +519,19 @@ label select {
   }
 }
 
+/* Narrow windows: there isn't room for the tab and the note editor side by
+   side, so the editor panel goes below the tab instead. */
+@media (max-width: 900px) {
+  .tab-with-editor {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tab-with-editor > .edit-note-col {
+    flex: none;
+  }
+}
+
 /* ---- Mobile-responsive layout ----
    Phones: toolbars stack, tab cells are narrower but taller (easier to tap),
    and the editor's note panel moves below the tab instead of beside it. */
@@ -509,11 +539,6 @@ label select {
   .app-shell {
     padding: 0.75rem 0.5rem 2rem;
     padding-bottom: max(2rem, env(safe-area-inset-bottom));
-  }
-
-  .tab-with-editor {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .tab-fret-cell {
@@ -540,7 +565,7 @@ label select {
   }
 
   .tab-sheet {
-    --tab-cell-width: 2rem;
+    --tab-cell-max: 2rem;
   }
 }
 
@@ -676,11 +701,34 @@ label select {
   background: var(--parchment-dark);
 }
 
+/* Pattern inserter: the Pattern and Chord fields stacked on the left, the
+   chord's diagram beside them (wrapping below them if there's no room). */
+.pattern-inserter-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.pattern-inserter-fields {
+  flex: 1 1 14rem;
+  max-width: 24rem;
+  min-width: 0;
+}
+
 .pattern-preview {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 0.75rem;
+}
+
+/* Button rows in the "Edit selected note" panel. */
+.note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .note-rhythm {

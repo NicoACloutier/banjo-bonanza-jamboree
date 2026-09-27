@@ -4,7 +4,7 @@
  * Kept free of DOM/Web Audio dependencies so it is easily unit-testable.
  */
 import { frettedFrequency } from "./audioTheory";
-import type { NoteOut, TimeSignature, TuningOut } from "../types/api";
+import type { NoteOut, TuningOut } from "../types/api";
 
 /** One string's sounding event within a (possibly chordal) note slot. */
 export interface SoundEvent {
@@ -33,31 +33,9 @@ export function effectiveBeats(note: NoteOut): number {
   return note.duration_beats * (note.dotted ? 1.5 : 1) * (note.triplet ? 2 / 3 : 1);
 }
 
-/** Length of one bar in beats (quarter notes); 6/8 is six eighth notes, i.e. three beats. */
-export function barLengthBeats(timeSignature: TimeSignature): number {
-  return { "2/4": 2, "3/4": 3, "4/4": 4, "6/8": 3 }[timeSignature];
-}
-
-// Beat positions within this of a bar line (or of each other) count as equal,
-// absorbing floating-point error from triplets (thirds of a beat).
+// Beat positions within this of a whole beat count as on it, absorbing
+// floating-point error from triplets (thirds of a beat).
 const BEAT_EPSILON = 1e-6;
-
-/**
- * Ids of the notes that start a new bar (other than the first), given the
- * time signature: a note starts a bar when the beats before it add up to a
- * whole number of bars.
- */
-export function barStartNoteIds(notes: NoteOut[], timeSignature: TimeSignature): Set<string> {
-  const barLength = barLengthBeats(timeSignature);
-  const ids = new Set<string>();
-  let beat = 0;
-  for (const note of [...notes].sort((a, b) => a.position - b.position)) {
-    const barsSoFar = beat / barLength;
-    if (beat > BEAT_EPSILON && Math.abs(barsSoFar - Math.round(barsSoFar)) < BEAT_EPSILON) ids.add(note.id);
-    beat += effectiveBeats(note);
-  }
-  return ids;
-}
 
 /**
  * Swing feel as a warp of beat positions: within each beat, the first eighth
@@ -240,26 +218,117 @@ export function totalDurationSeconds(notes: NoteOut[], tempoBpm: number, swing =
   return (swing ? swingBeat(beats) : beats) * (60 / tempoBpm);
 }
 
-/** Notes per rendered tab line before an automatic line break is inserted. */
+/** Notes per line by default (and for tabs whose lines have never been resized). */
 export const NOTES_PER_LINE = 16;
+/** Lines can be resized (by inserting/removing notes) within these bounds. */
+export const MIN_NOTES_PER_LINE = 4;
+export const MAX_NOTES_PER_LINE = 20;
 
 /**
- * Split notes (in position order) into lines. A line breaks automatically
- * every `NOTES_PER_LINE` notes, or earlier if a note is explicitly flagged
- * `line_break` (kept for any pre-existing tabs authored before automatic
- * line breaks were introduced).
+ * Split notes (in position order) into lines. Each line's last note is
+ * flagged `line_break` once any line has been resized (see
+ * `withExplicitLineBreaks`); lines then end at those flags, capped at
+ * `MAX_NOTES_PER_LINE`. A tab with no flags at all (e.g. a new tab) breaks
+ * automatically every `NOTES_PER_LINE` notes.
  */
 export function splitIntoLines(notes: NoteOut[]): NoteOut[][] {
   const sorted = [...notes].sort((a, b) => a.position - b.position);
+  const cap = sorted.some((n) => n.line_break) ? MAX_NOTES_PER_LINE : NOTES_PER_LINE;
   const lines: NoteOut[][] = [];
   let current: NoteOut[] = [];
   for (const note of sorted) {
     current.push(note);
-    if (note.line_break || current.length >= NOTES_PER_LINE) {
+    if (note.line_break || current.length >= cap) {
       lines.push(current);
       current = [];
     }
   }
   if (current.length > 0) lines.push(current);
   return lines;
+}
+
+/** Renumber positions 0..n-1 in array order. */
+function reindex(notes: NoteOut[]): NoteOut[] {
+  return notes.map((n, position) => ({ ...n, position }));
+}
+
+/**
+ * The same notes and layout, with every line's last note flagged
+ * `line_break` (and no other note flagged), so lines keep their shape when
+ * notes are inserted or removed. Positions are renumbered in order.
+ */
+export function withExplicitLineBreaks(notes: NoteOut[]): NoteOut[] {
+  return reindex(
+    splitIntoLines(notes).flatMap((line) => line.map((n, i) => ({ ...n, line_break: i === line.length - 1 }))),
+  );
+}
+
+/** The line containing a note, with its first note's index in the (sorted) tab. */
+function lineOf(lines: NoteOut[][], noteId: string): { line: NoteOut[]; start: number } | null {
+  let start = 0;
+  for (const line of lines) {
+    if (line.some((n) => n.id === noteId)) return { line, start };
+    start += line.length;
+  }
+  return null;
+}
+
+/**
+ * Insert `newNote` right after `noteId`, in the same line. Returns null if
+ * that line already has `MAX_NOTES_PER_LINE` notes.
+ */
+export function insertNoteAfter(notes: NoteOut[], noteId: string, newNote: NoteOut): NoteOut[] | null {
+  const explicit = withExplicitLineBreaks(notes);
+  const found = lineOf(splitIntoLines(explicit), noteId);
+  if (!found || found.line.length >= MAX_NOTES_PER_LINE) return null;
+  const index = explicit.findIndex((n) => n.id === noteId);
+  const target = explicit[index];
+  // The new note takes over the line end if it goes after the line's last note.
+  const inserted = { ...newNote, line_break: target.line_break };
+  return reindex([...explicit.slice(0, index), { ...target, line_break: false }, inserted, ...explicit.slice(index + 1)]);
+}
+
+/** Remove a note from its line. Returns null if the line has only `MIN_NOTES_PER_LINE` notes. */
+export function removeNoteFromLine(notes: NoteOut[], noteId: string): NoteOut[] | null {
+  const explicit = withExplicitLineBreaks(notes);
+  const found = lineOf(splitIntoLines(explicit), noteId);
+  if (!found || found.line.length <= MIN_NOTES_PER_LINE) return null;
+  const index = explicit.findIndex((n) => n.id === noteId);
+  const next = [...explicit];
+  // Removing a line's last note makes the note before it the line end.
+  if (next[index].line_break) next[index - 1] = { ...next[index - 1], line_break: true };
+  next.splice(index, 1);
+  return reindex(next);
+}
+
+/** Append `newNotes` as a new line (or lines) after the last one. */
+export function appendLine(notes: NoteOut[], newNotes: NoteOut[]): NoteOut[] {
+  const appended = newNotes.map((n, i) => ({ ...n, line_break: i === newNotes.length - 1 }));
+  return reindex([...withExplicitLineBreaks(notes), ...appended]);
+}
+
+/**
+ * Paste copied notes as new line(s) right after `afterNoteId` (or at the
+ * end), keeping the copied notes' own line breaks: the selected note ends
+ * its line, and the pasted notes finish on a line end.
+ */
+export function pasteLines(notes: NoteOut[], afterNoteId: string | null, pasted: NoteOut[]): NoteOut[] {
+  const explicit = withExplicitLineBreaks(notes);
+  const index = afterNoteId === null ? explicit.length - 1 : explicit.findIndex((n) => n.id === afterNoteId);
+  const before = explicit.slice(0, index + 1);
+  if (before.length > 0) before[before.length - 1] = { ...before[before.length - 1], line_break: true };
+  const chunk = pasted.map((n, i) => (i === pasted.length - 1 ? { ...n, line_break: true } : n));
+  return reindex([...before, ...chunk, ...explicit.slice(index + 1)]);
+}
+
+/**
+ * Indices within a line of `lineLength` notes that start a new bar, dividing
+ * it into `barsPerLine` groups as evenly as possible (16 notes / 4 bars:
+ * 4, 8, 12).
+ */
+export function barBreakIndices(lineLength: number, barsPerLine: number): Set<number> {
+  const bars = Math.max(1, Math.min(barsPerLine, lineLength));
+  const indices = new Set<number>();
+  for (let bar = 1; bar < bars; bar++) indices.add(Math.round((bar * lineLength) / bars));
+  return indices;
 }

@@ -89,7 +89,7 @@ export type Difficulty = "beginner" | "intermediate" | "advanced";
 
 /** Tab-level settings shared by create/update requests, tab details and revisions. */
 export interface TabSettings {
-  /** Bar lines fall at measure boundaries; null (older tabs) keeps fixed `bars_per_line` dividers. */
+  /** The tab's time signature, shown with it; null if not set (e.g. older tabs). */
   time_signature: TimeSignature | null;
   /** Pairs of eighth notes play long-short. */
   swing: boolean;

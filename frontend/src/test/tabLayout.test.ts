@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  barStartNoteIds,
   computePlaybackSchedule,
   effectiveBeats,
   splitIntoLines,
+  appendLine,
+  barBreakIndices,
+  insertNoteAfter,
+  pasteLines,
+  removeNoteFromLine,
+  withExplicitLineBreaks,
   swingBeat,
   totalDurationSeconds,
 } from "../lib/tabLayout";
@@ -340,17 +345,6 @@ describe("tabLayout", () => {
       expect(starts[3]).toBeCloseTo(1, 10);
     });
 
-    it("puts bar lines at measure boundaries for the time signature", () => {
-      const quarters = [0, 1, 2, 3, 4, 5, 6].map((i) => n(`q${i}`, i));
-      expect([...barStartNoteIds(quarters, "4/4")]).toEqual(["q4"]);
-      expect([...barStartNoteIds(quarters, "3/4")]).toEqual(["q3", "q6"]);
-      const eighths = Array.from({ length: 13 }, (_, i) => n(`e${i}`, i, { duration_beats: 0.5 }));
-      expect([...barStartNoteIds(eighths, "6/8")]).toEqual(["e6", "e12"]);
-      // A dotted quarter + eighth fills two beats.
-      const dotted = [n("d", 0, { dotted: true }), n("e", 1, { duration_beats: 0.5 }), n("f", 2), n("g", 3)];
-      expect([...barStartNoteIds(dotted, "2/4")]).toEqual(["f"]);
-    });
-
     it("swings eighth notes long-short without changing whole beats", () => {
       expect(swingBeat(0.5)).toBeCloseTo(2 / 3, 10);
       expect(swingBeat(2)).toBe(2);
@@ -410,6 +404,73 @@ describe("tabLayout", () => {
       const notes = [makeNote({ id: "a", thumb_after: true })];
       const thumb = computePlaybackSchedule(notes, tuning, 60, 0, { clawhammerTiming: true, fifthStringCapoFret: 9 })[1];
       expect(thumb.sounds[0].frequency).toBeCloseTo(g4 * Math.pow(2, 4 / 12), 5);
+    });
+  });
+
+  describe("resizable lines", () => {
+    const blank = (id: string, position = 0, line_break = false) => makeNote({ id, position, line_break, frets: [] });
+    const tab = (count: number) => Array.from({ length: count }, (_, i) => blank(`n${i}`, i));
+    const lengths = (notes: NoteOut[]) => splitIntoLines(notes).map((line) => line.length);
+
+    it("breaks unflagged tabs every 16 notes, and flagged tabs at their line ends (max 20)", () => {
+      expect(lengths(tab(40))).toEqual([16, 16, 8]);
+      const flagged = tab(30).map((n, i) => ({ ...n, line_break: i === 17 }));
+      expect(lengths(flagged)).toEqual([18, 12]);
+      const longUnflaggedTail = tab(30).map((n, i) => ({ ...n, line_break: i === 3 }));
+      expect(lengths(longUnflaggedTail)).toEqual([4, 20, 6]);
+    });
+
+    it("flags each line end without changing the layout", () => {
+      const explicit = withExplicitLineBreaks(tab(40));
+      expect(lengths(explicit)).toEqual([16, 16, 8]);
+      expect(explicit.filter((n) => n.line_break).map((n) => n.position)).toEqual([15, 31, 39]);
+    });
+
+    it("inserts a note into a line, up to 20 notes", () => {
+      let notes: NoteOut[] | null = tab(32);
+      notes = insertNoteAfter(notes, "n3", blank("new"))!;
+      expect(lengths(notes)).toEqual([17, 16]);
+      expect(notes.map((n) => n.id).slice(3, 6)).toEqual(["n3", "new", "n4"]);
+      for (let i = 0; i < 3; i++) notes = insertNoteAfter(notes!, "n0", blank(`x${i}`));
+      expect(lengths(notes!)).toEqual([20, 16]);
+      expect(insertNoteAfter(notes!, "n0", blank("too-many"))).toBeNull();
+    });
+
+    it("moves the line end to a note inserted after the line's last note", () => {
+      const notes = insertNoteAfter(tab(32), "n15", blank("end"))!;
+      expect(lengths(notes)).toEqual([17, 16]);
+      expect(notes[16]).toMatchObject({ id: "end", line_break: true });
+      expect(notes[15].line_break).toBe(false);
+    });
+
+    it("removes a note from a line, down to 4 notes", () => {
+      let notes: NoteOut[] | null = tab(20).map((n, i) => ({ ...n, line_break: i === 4 }));
+      expect(lengths(notes)).toEqual([5, 15]);
+      notes = removeNoteFromLine(notes, "n4")!; // the line's last note: n3 becomes the line end
+      expect(lengths(notes)).toEqual([4, 15]);
+      expect(notes[3]).toMatchObject({ id: "n3", line_break: true });
+      expect(removeNoteFromLine(notes, "n0")).toBeNull();
+    });
+
+    it("appends a new line after the last one, keeping resized lines", () => {
+      const resized = insertNoteAfter(tab(16), "n0", blank("x"))!;
+      const notes = appendLine(resized, tab(16).map((n) => ({ ...n, id: `new-${n.id}` })));
+      expect(lengths(notes)).toEqual([17, 16]);
+      expect(notes.map((n) => n.position)).toEqual([...Array(33).keys()]);
+    });
+
+    it("pastes copied notes as new lines after the selected note, keeping their breaks", () => {
+      const copied = tab(8).map((n, i) => ({ ...n, id: `c${i}`, line_break: i === 3 }));
+      const notes = pasteLines(tab(16), "n9", copied);
+      expect(lengths(notes)).toEqual([10, 4, 4, 6]);
+    });
+
+    it("divides a line of any length into equal bar groups", () => {
+      expect([...barBreakIndices(16, 1)]).toEqual([]);
+      expect([...barBreakIndices(16, 2)]).toEqual([8]);
+      expect([...barBreakIndices(16, 4)]).toEqual([4, 8, 12]);
+      expect([...barBreakIndices(18, 2)]).toEqual([9]);
+      expect([...barBreakIndices(20, 4)]).toEqual([5, 10, 15]);
     });
   });
 });

@@ -22,12 +22,9 @@ beforeEach(() => {
   engineStop.mockClear();
 });
 
-// Tabs without a time signature keep the fixed "bars per line" layout.
-const LEGACY_SETTINGS: TabSettings = { ...DEFAULT_TAB_SETTINGS, time_signature: null };
-
 function Harness({
   initialNotes = [] as NoteOut[],
-  settings = LEGACY_SETTINGS,
+  settings = DEFAULT_TAB_SETTINGS,
 }: {
   initialNotes?: NoteOut[];
   settings?: TabSettings;
@@ -504,19 +501,26 @@ describe("TabEditor", () => {
     const barBreakCount = (container: HTMLElement) =>
       container.querySelectorAll(".tab-string-row")[0].querySelectorAll(".bar-break").length;
 
-    it("draws bar lines from the time signature, and hides 'bars per line' when there is one", async () => {
+    it("keeps 16-note lines whatever the time signature, grouped only by 'bars per line'", async () => {
       const user = userEvent.setup();
       const notes = Array.from({ length: 16 }, (_, i) => ({ ...createEmptyNote(i), duration_beats: 0.5 }));
       const { container } = render(<Harness initialNotes={notes} settings={FOUR_FOUR} />);
-      expect(screen.queryByRole("button", { name: "4 bars" })).not.toBeInTheDocument();
-      // 16 eighth notes in 4/4 is two bars: one bar line, before note 9.
+      const lineCount = () => container.querySelectorAll(".tab-line").length;
+
+      await user.click(screen.getByRole("button", { name: "1 bar" }));
+      expect(lineCount()).toBe(1);
+      expect(barBreakCount(container)).toBe(0);
+
+      await user.click(screen.getByRole("button", { name: "2 bars" }));
       expect(barBreakCount(container)).toBe(1);
 
-      await user.selectOptions(screen.getByLabelText(/time signature/i), "2/4");
-      expect(barBreakCount(container)).toBe(3);
+      await user.selectOptions(screen.getByLabelText(/time signature/i), "3/4");
+      expect(lineCount()).toBe(1);
+      expect(barBreakCount(container)).toBe(1);
 
-      await user.selectOptions(screen.getByLabelText(/time signature/i), "");
-      expect(screen.getByRole("button", { name: "4 bars" })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /\+ add a line/i }));
+      expect(lineCount()).toBe(2);
+      expect(container.querySelectorAll(".duration-marker")).toHaveLength(32);
     });
 
     it("sets a note's duration, dotted, triplet and tie from the note panel", async () => {
@@ -587,6 +591,55 @@ describe("TabEditor", () => {
       await user.type(screen.getByLabelText(/^chord$/i), "Hx");
       expect(screen.getByText(/isn't a chord name/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /add to the end/i })).toBeDisabled();
+    });
+  });
+
+  describe("resizing lines", () => {
+    const sixteen = () => Array.from({ length: 16 }, (_, i) => createEmptyNote(i));
+    const lineLengths = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll(".tab-line")).map(
+        (line) => line.querySelectorAll(".duration-marker").length,
+      );
+    const selectNote = (user: ReturnType<typeof userEvent.setup>, container: HTMLElement, index: number) =>
+      user.click(container.querySelectorAll(".duration-marker")[index] as HTMLElement);
+
+    it("inserts and removes notes in the selected note's line", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<Harness initialNotes={[...sixteen(), ...sixteen().map((n, i) => ({ ...n, position: 16 + i }))]} />);
+      await selectNote(user, container, 2);
+      expect(screen.getByText(/this line has 16 notes/i)).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /insert note after/i }));
+      expect(lineLengths(container)).toEqual([17, 16]);
+      expect(screen.getByText(/this line has 17 notes/i)).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /remove this note/i }));
+      await user.click(screen.getByRole("button", { name: /remove this note/i }));
+      expect(lineLengths(container)).toEqual([15, 16]);
+    });
+
+    it("won't grow a line past 20 notes or shrink it below 4", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<Harness initialNotes={sixteen()} />);
+      await selectNote(user, container, 0);
+      const insert = screen.getByRole("button", { name: /insert note after/i });
+      for (let i = 0; i < 4; i++) await user.click(insert);
+      expect(lineLengths(container)).toEqual([20]);
+      expect(insert).toBeDisabled();
+
+      const remove = screen.getByRole("button", { name: /remove this note/i });
+      for (let i = 0; i < 16; i++) await user.click(remove);
+      expect(lineLengths(container)).toEqual([4]);
+      expect(remove).toBeDisabled();
+    });
+
+    it("keeps a resized line's length when adding a new line", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<Harness initialNotes={sixteen()} />);
+      await selectNote(user, container, 0);
+      await user.click(screen.getByRole("button", { name: /insert note after/i }));
+      await user.click(screen.getByRole("button", { name: /\+ add a line/i }));
+      expect(lineLengths(container)).toEqual([17, 16]);
     });
   });
 });

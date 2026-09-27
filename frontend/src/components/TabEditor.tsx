@@ -2,7 +2,9 @@
  * Tab creation/editing UI.
  *
  * The song is laid out as a grid of note slots, added a whole line (16
- * notes) at a time via "+ Add a line". Every note starts blank (all "-"
+ * notes) at a time via "+ Add a line"; a line can then be resized (4-20
+ * notes) by inserting or removing notes from the note panel. Every note
+ * starts blank (all "-"
  * on every string): fret numbers are typed directly into the tab preview
  * by clicking a string's cell for that note, and lyrics are typed
  * directly into the small text box below each note. A note left blank on
@@ -27,7 +29,17 @@ import { TabSettingsFields } from "./TabSettingsFields";
 import { findChordShapes, parseChord } from "../lib/chords";
 import type { PatternResult } from "../lib/patterns";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
-import { fifthStringRaise } from "../lib/tabLayout";
+import {
+  appendLine,
+  fifthStringRaise,
+  insertNoteAfter,
+  MAX_NOTES_PER_LINE,
+  MIN_NOTES_PER_LINE,
+  NOTES_PER_LINE,
+  pasteLines,
+  removeNoteFromLine,
+  splitIntoLines,
+} from "../lib/tabLayout";
 import { playOptionsFor } from "../lib/tabSettings";
 import type { NoteFretIn, NoteOut, RightHandFinger, TabSettings, Technique, TuningOut } from "../types/api";
 
@@ -39,7 +51,7 @@ export interface TabMetadata {
   tempoBpm: number;
   /** Physical capo position (0 = no capo), 0-12 frets. */
   capoFret: number;
-  /** Without a time signature: how many bars each rendered line of 16 notes is divided into (1, 2, or 4). */
+  /** How many bars each rendered line of 16 notes is visually divided into (1, 2, or 4). */
   barsPerLine: number;
   /** Clawhammer mode: notes can add a 5th-string thumb pluck after them (`thumb_after`). */
   clawhammerTiming: boolean;
@@ -113,9 +125,6 @@ function createNoteId(): string {
     ? crypto.randomUUID()
     : `note-${Math.random().toString(36).slice(2)}`;
 }
-
-/** Notes added/seeded as a single "line" at once (see `+ Add a line`). */
-export const NOTES_PER_LINE = 16;
 
 /**
  * A blank placeholder note: not a rest -- it is a normal, sound-producing
@@ -274,11 +283,12 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     setPlayingNoteId(null);
   };
 
-  const totalLines = Math.max(1, Math.ceil(notes.length / NOTES_PER_LINE));
-  const notesInLine = (lineIdx: number) =>
-    Math.min(NOTES_PER_LINE, Math.max(0, notes.length - lineIdx * NOTES_PER_LINE));
+  // The tab's lines, exactly as the preview lays them out.
+  const lines = splitIntoLines(notes);
+  const totalLines = Math.max(1, lines.length);
+  const notesInLine = (lineIdx: number) => lines[lineIdx]?.length ?? 0;
   const noteAtRangePoint = (lineIdx: number, noteInLineIdx: number): NoteOut | null =>
-    notes[lineIdx * NOTES_PER_LINE + noteInLineIdx] ?? null;
+    lines[lineIdx]?.[noteInLineIdx] ?? null;
   const rangeStartNote = noteAtRangePoint(rangeStartLine, rangeStartNoteInLine);
   const rangeEndNote = noteAtRangePoint(rangeEndLine, rangeEndNoteInLine);
 
@@ -337,6 +347,30 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedNote, metadata.clawhammerTiming, notes, onNotesChange]);
 
+  // How long the selected note's line is, for the insert/remove note buttons.
+  const selectedLineLength = selectedNote ? (lines.find((l) => l.some((n) => n.id === selectedNote.id))?.length ?? 0) : 0;
+
+  /** Insert a blank note right after the selected one, in the same line (lines hold at most 20). */
+  const insertNoteAfterSelected = () => {
+    if (!selectedNote) return;
+    const blank = createEmptyNote(0);
+    const next = insertNoteAfter(notes, selectedNote.id, blank);
+    if (!next) return;
+    onNotesChange(next);
+    setSelectedNoteId(blank.id);
+  };
+
+  /** Remove the selected note from its line (lines keep at least 4), selecting its neighbour. */
+  const removeSelectedNote = () => {
+    if (!selectedNote) return;
+    const next = removeNoteFromLine(notes, selectedNote.id);
+    if (!next) return;
+    const sorted = [...notes].sort((a, b) => a.position - b.position);
+    const index = sorted.findIndex((n) => n.id === selectedNote.id);
+    onNotesChange(next);
+    setSelectedNoteId((sorted[index + 1] ?? sorted[index - 1])?.id ?? null);
+  };
+
   /** Reset the selected note back to blank (all "-") without removing its slot from the tab. */
   const clearSelectedNote = () => {
     if (!selectedNote) return;
@@ -344,20 +378,18 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
   };
 
   /**
-   * Remove the whole 16-note line containing the currently selected note
-   * (i.e. positions [lineStart, lineStart + NOTES_PER_LINE)), so a user can
-   * delete an entire verse/chorus line at once rather than one note at a
-   * time.
+   * Remove the whole line (as laid out in the preview) containing the
+   * currently selected note, so a user can delete an entire verse/chorus
+   * line at once rather than one note at a time.
    */
   const removeSelectedLine = () => {
     if (!selectedNote) return;
-    const sorted = [...notes].sort((a, b) => a.position - b.position);
-    const selectedIdx = sorted.findIndex((n) => n.id === selectedNote.id);
-    if (selectedIdx === -1) return;
-    const lineStart = Math.floor(selectedIdx / NOTES_PER_LINE) * NOTES_PER_LINE;
-    const lineEnd = lineStart + NOTES_PER_LINE;
-    const remaining = sorted
-      .filter((_, idx) => idx < lineStart || idx >= lineEnd)
+    const line = lines.find((l) => l.some((n) => n.id === selectedNote.id));
+    if (!line) return;
+    const removed = new Set(line.map((n) => n.id));
+    const remaining = [...notes]
+      .sort((a, b) => a.position - b.position)
+      .filter((n) => !removed.has(n.id))
       .map((n, idx) => ({ ...n, position: idx }));
     onNotesChange(remaining);
     setSelectedNoteId(null);
@@ -449,22 +481,20 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
 
   return (
     <div>
-      {metadata.settings.time_signature === null && (
-        <div className="toolbar">
-          <span>Bars per line:</span>
-          {BAR_OPTIONS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={metadata.barsPerLine === n ? "" : "secondary"}
-              aria-pressed={metadata.barsPerLine === n}
-              onClick={() => onMetadataChange({ ...metadata, barsPerLine: n })}
-            >
-              {n} {n === 1 ? "bar" : "bars"}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="toolbar">
+        <span>Bars per line:</span>
+        {BAR_OPTIONS.map((n) => (
+          <button
+            key={n}
+            type="button"
+            className={metadata.barsPerLine === n ? "" : "secondary"}
+            aria-pressed={metadata.barsPerLine === n}
+            onClick={() => onMetadataChange({ ...metadata, barsPerLine: n })}
+          >
+            {n} {n === 1 ? "bar" : "bars"}
+          </button>
+        ))}
+      </div>
 
       <div className="form-row">
         <label>
@@ -592,7 +622,6 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
         <div className="tab-preview-col">
           <TabRenderer
             notes={notes}
-            timeSignature={metadata.settings.time_signature}
             barsPerLine={metadata.barsPerLine}
             clawhammerTiming={metadata.clawhammerTiming}
             selectedNoteId={selectedNoteId}
@@ -608,15 +637,24 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
               type="button"
               className="secondary"
               onClick={() =>
-                onNotesChange([
-                  ...notes,
-                  ...Array.from({ length: NOTES_PER_LINE }, (_, i) => createEmptyNote(notes.length + i)),
-                ])
+                onNotesChange(
+                  appendLine(
+                    notes,
+                    Array.from({ length: NOTES_PER_LINE }, (_, i) => createEmptyNote(notes.length + i)),
+                  ),
+                )
               }
             >
               + Add a line
             </button>
           </div>
+          <PatternInserter
+            tuning={tuning}
+            capoFret={metadata.capoFret}
+            fifthStringCapoFret={metadata.settings.fifth_string_capo_fret}
+            hasSelection={selectedNote !== null}
+            onInsert={insertPattern}
+          />
         </div>
 
         {selectedNote && (
@@ -702,7 +740,28 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
                   Then pluck the 5th string (T)
                 </label>
               )}
-              <div className="form-row">
+              <p className="muted-text line-length">
+                This line has {selectedLineLength} notes (lines can have {MIN_NOTES_PER_LINE} to {MAX_NOTES_PER_LINE}).
+              </p>
+              <div className="note-actions">
+                <button
+                  className="secondary"
+                  onClick={insertNoteAfterSelected}
+                  disabled={selectedLineLength >= MAX_NOTES_PER_LINE}
+                  title={selectedLineLength >= MAX_NOTES_PER_LINE ? `A line can hold at most ${MAX_NOTES_PER_LINE} notes` : undefined}
+                >
+                  + Insert note after
+                </button>
+                <button
+                  className="secondary"
+                  onClick={removeSelectedNote}
+                  disabled={selectedLineLength <= MIN_NOTES_PER_LINE}
+                  title={selectedLineLength <= MIN_NOTES_PER_LINE ? `A line needs at least ${MIN_NOTES_PER_LINE} notes` : undefined}
+                >
+                  Remove this note
+                </button>
+              </div>
+              <div className="note-actions">
                 <button className="secondary" onClick={clearSelectedNote}>
                   Clear this note
                 </button>
@@ -715,19 +774,11 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
         )}
       </div>
 
-      <PatternInserter
-        tuning={tuning}
-        capoFret={metadata.capoFret}
-        fifthStringCapoFret={metadata.settings.fifth_string_capo_fret}
-        hasSelection={selectedNote !== null}
-        onInsert={insertPattern}
-      />
-
       <div className="panel">
         <h3>Copy / paste a range</h3>
         <p className="muted-text">
           Pick a start and end note (e.g. the chorus) by line + note-in-line, copy it, then paste it back
-          in after selecting where it should go -- handy for reusing a section and just changing the
+          in as new line(s) after the selected note -- handy for reusing a section and just changing the
           lyrics.
         </p>
         <div className="form-row">
@@ -813,14 +864,9 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
             disabled={!clipboard}
             onClick={() => {
               if (!clipboard) return;
-              // Paste after the currently selected note (or at the end if none selected).
-              const insertAfterIdx = selectedNote
-                ? notes.findIndex((n) => n.id === selectedNote.id)
-                : notes.length - 1;
+              // Paste as new line(s) after the selected note (or at the end if none selected).
               const pasted = clipboard.map((n) => ({ ...n, id: createNoteId() }));
-              const before = notes.slice(0, insertAfterIdx + 1);
-              const after = notes.slice(insertAfterIdx + 1);
-              onNotesChange([...before, ...pasted, ...after].map((n, idx) => ({ ...n, position: idx })));
+              onNotesChange(pasteLines(notes, selectedNote?.id ?? null, pasted));
             }}
           >
             Paste after selected note{clipboard ? ` (${clipboard.length} notes)` : ""}

@@ -33,7 +33,7 @@ export function TabSettingsFields({ settings, onChange }: TabSettingsFieldsProps
                 {ts}
               </option>
             ))}
-            <option value="">None (fixed bars per line)</option>
+            <option value="">None</option>
           </select>
         </label>
         <label>

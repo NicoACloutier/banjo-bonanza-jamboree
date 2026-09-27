@@ -158,7 +158,7 @@ class TabCreateRequest(msgspec.Struct):
     bars_per_line: int = 4
     # Clawhammer mode: enables notes' `thumb_after` 5th-string plucks.
     clawhammer_timing: bool = False
-    # "2/4", "3/4", "4/4" or "6/8"; None keeps fixed bars_per_line dividers.
+    # "2/4", "3/4", "4/4" or "6/8", shown with the tab; None if not set.
     time_signature: str | None = None
     # Pairs of eighth notes play long-short.
     swing: bool = False

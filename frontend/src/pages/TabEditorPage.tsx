@@ -50,7 +50,7 @@ export function TabEditorPage() {
     tuningKey: FALLBACK_TUNINGS[0].key,
     tempoBpm: 100,
     capoFret: 0,
-    barsPerLine: 4,
+    barsPerLine: 1,
     clawhammerTiming: false,
     settings: DEFAULT_TAB_SETTINGS,
   });
