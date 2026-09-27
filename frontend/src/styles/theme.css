@@ -640,6 +640,13 @@ label select {
   background: var(--parchment-dark);
 }
 
+.pattern-preview {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
 .note-rhythm {
   align-items: flex-end;
 }

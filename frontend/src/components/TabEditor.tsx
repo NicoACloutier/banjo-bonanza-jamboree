@@ -16,13 +16,16 @@
  * while a note with at least one fret is selected. The same panel sets the
  * note's rhythm (duration, dotted, triplet, tied to the previous note), and
  * shows a diagram of the chord named above it. Chord names are typed into
- * the row above the tab.
+ * the row above the tab; whole bars of rolls/patterns can be inserted with
+ * `PatternInserter`.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChordDiagram } from "./ChordDiagram";
+import { PatternInserter } from "./PatternInserter";
 import { TabRenderer } from "./TabRenderer";
 import { TabSettingsFields } from "./TabSettingsFields";
 import { findChordShapes, parseChord } from "../lib/chords";
+import type { PatternResult } from "../lib/patterns";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
 import { fifthStringRaise } from "../lib/tabLayout";
 import { playOptionsFor } from "../lib/tabSettings";
@@ -413,6 +416,26 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     onNotesChange(notes.map((n) => (n.id === noteId ? { ...n, chord: chord.trim() ? chord : null } : n)));
   };
 
+  /**
+   * Write a pattern's notes into the tab starting at the selected note (or
+   * after the last note), overwriting those slots' sound and rhythm but
+   * keeping their lyrics, and adding slots past the end as needed. The note
+   * just after the pattern is selected, so bars can be inserted back to back.
+   */
+  const insertPattern = ({ notes: patternNotes, needsClawhammer }: PatternResult) => {
+    const sorted = [...notes].sort((a, b) => a.position - b.position);
+    const selectedIdx = selectedNote ? sorted.findIndex((n) => n.id === selectedNote.id) : -1;
+    const start = selectedIdx === -1 ? sorted.length : selectedIdx;
+    const next = [...sorted];
+    patternNotes.forEach((patternNote, i) => {
+      const existing = next[start + i] ?? createEmptyNote(start + i);
+      next[start + i] = { ...existing, ...patternNote, dotted: false, triplet: false, tied: false, is_rest: false };
+    });
+    onNotesChange(next.map((n, idx) => ({ ...n, position: idx })));
+    setSelectedNoteId(next[start + patternNotes.length]?.id ?? null);
+    if (needsClawhammer && !metadata.clawhammerTiming) onMetadataChange({ ...metadata, clawhammerTiming: true });
+  };
+
   const handleDurationCycle = (noteId: string) => {
     onNotesChange(
       notes.map((n) => {
@@ -691,6 +714,14 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
           </div>
         )}
       </div>
+
+      <PatternInserter
+        tuning={tuning}
+        capoFret={metadata.capoFret}
+        fifthStringCapoFret={metadata.settings.fifth_string_capo_fret}
+        hasSelection={selectedNote !== null}
+        onInsert={insertPattern}
+      />
 
       <div className="panel">
         <h3>Copy / paste a range</h3>

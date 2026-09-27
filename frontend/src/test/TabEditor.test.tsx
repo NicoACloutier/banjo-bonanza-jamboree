@@ -499,7 +499,7 @@ describe("TabEditor", () => {
     expect(enginePlay.mock.calls[0][3]).toBe(2);
   });
 
-  describe("rhythm and chords", () => {
+  describe("rhythm, chords and patterns", () => {
     const FOUR_FOUR: TabSettings = { ...DEFAULT_TAB_SETTINGS, time_signature: "4/4" };
     const barBreakCount = (container: HTMLElement) =>
       container.querySelectorAll(".tab-string-row")[0].querySelectorAll(".bar-break").length;
@@ -545,6 +545,48 @@ describe("TabEditor", () => {
       const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} settings={FOUR_FOUR} />);
       await user.type(screen.getByLabelText("Chord at this note"), "C");
       expect(within(container.querySelector(".edit-note-col")!).getByRole("img", { name: /^C:/ })).toBeInTheDocument();
+    });
+
+    it("inserts a bar of a roll at the selected note, with finger marks and the chord name", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<Harness initialNotes={[createEmptyNote(0)]} settings={FOUR_FOUR} />);
+      await user.click(container.querySelector(".duration-marker") as HTMLElement); // select note 1
+      await user.selectOptions(screen.getByLabelText(/^pattern$/i), "forward");
+      await user.clear(screen.getByLabelText(/^chord$/i));
+      await user.type(screen.getByLabelText(/^chord$/i), "G");
+      await user.click(screen.getByRole("button", { name: /insert at selected note/i }));
+
+      const chordInputs = screen.getAllByLabelText("Chord at this note") as HTMLInputElement[];
+      expect(chordInputs).toHaveLength(8);
+      expect(chordInputs[0]).toHaveValue("G");
+      const cells = (row: number) =>
+        Array.from(container.querySelectorAll(".tab-string-row")[row - 1].querySelectorAll(".tab-fret-cell")).map(
+          (c) => c.textContent,
+        );
+      // Forward roll on strings 3 2 1 5 2 1 5 1, all open for G, with T/I/M marks.
+      expect(cells(3)[0]).toBe("0T");
+      expect(cells(2)[1]).toBe("0I");
+      expect(cells(1)[2]).toBe("0M");
+      expect(cells(5)[3]).toBe("0T");
+      expect(container.querySelectorAll(".duration-marker")[0]).toHaveTextContent("8th");
+    });
+
+    it("turns on clawhammer mode when inserting a bum-ditty", async () => {
+      const user = userEvent.setup();
+      render(<Harness initialNotes={[]} settings={FOUR_FOUR} />);
+      await user.selectOptions(screen.getByLabelText(/^pattern$/i), "bum_ditty");
+      await user.click(screen.getByRole("button", { name: /add to the end/i }));
+      expect(screen.getByLabelText(/clawhammer mode/i)).toBeChecked();
+      expect(document.querySelectorAll(".thumb-pluck")).toHaveLength(2);
+    });
+
+    it("explains a chord the pattern tool can't use", async () => {
+      const user = userEvent.setup();
+      render(<Harness initialNotes={[]} settings={FOUR_FOUR} />);
+      await user.clear(screen.getByLabelText(/^chord$/i));
+      await user.type(screen.getByLabelText(/^chord$/i), "Hx");
+      expect(screen.getByText(/isn't a chord name/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /add to the end/i })).toBeDisabled();
     });
   });
 });

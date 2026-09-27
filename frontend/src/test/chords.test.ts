@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findChordShapes, parseChord } from "../lib/chords";
+import { buildPattern, PATTERNS } from "../lib/patterns";
 import { getFallbackTuning } from "../lib/tunings";
 
 const openG = getFallbackTuning("standard_g").open_strings;
@@ -61,5 +62,41 @@ describe("findChordShapes", () => {
     expect(findChordShapes(parseChord("D")!, openG)[0].fifthStringFits).toBe(false);
     // Spiking the 5th string up to A makes it fit a D chord.
     expect(findChordShapes(parseChord("D")!, openG, { fifthStringRaise: 2 })[0].fifthStringFits).toBe(true);
+  });
+});
+
+describe("buildPattern", () => {
+  const tuning = getFallbackTuning("standard_g");
+
+  it("builds a bar of eighth-note rolls over the chord's shape, with finger marks", () => {
+    const { notes, needsClawhammer } = buildPattern("alternating_thumb", "C", tuning);
+    expect(needsClawhammer).toBe(false);
+    expect(notes).toHaveLength(8);
+    expect(notes.every((n) => n.duration_beats === 0.5)).toBe(true);
+    expect(notes.map((n) => `${n.frets[0].string_number}:${n.frets[0].fret}`)).toEqual([
+      "3:0", "2:1", "5:0", "1:2", "4:2", "2:1", "5:0", "1:2",
+    ]);
+    expect(notes.map((n) => n.frets[0].right_hand_finger?.[0].toUpperCase()).join("")).toBe("TITMTITM");
+    expect(notes[0].chord).toBe("C");
+    expect(notes.slice(1).every((n) => n.chord === null)).toBe(true);
+  });
+
+  it("builds clawhammer bum-ditty: melody notes and brushes with thumb plucks", () => {
+    const { notes, needsClawhammer } = buildPattern("bum_ditty", "G", tuning);
+    expect(needsClawhammer).toBe(true);
+    expect(notes.map((n) => [n.frets.map((f) => f.string_number), n.thumb_after])).toEqual([
+      [[3], false],
+      [[1, 2, 3], true],
+      [[4], false],
+      [[1, 2, 3], true],
+    ]);
+  });
+
+  it("every pattern builds for a common chord", () => {
+    for (const pattern of PATTERNS) expect(buildPattern(pattern.id, "D", tuning).notes.length).toBeGreaterThan(0);
+  });
+
+  it("explains unknown chords", () => {
+    expect(() => buildPattern("forward", "Hm", tuning)).toThrow(/isn't a chord name/);
   });
 });
