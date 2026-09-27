@@ -72,7 +72,14 @@ export interface NoteOut {
   frets: NoteFretOut[];
 }
 
-export interface TabCreateRequest {
+
+/** Tab-level settings shared by create/update requests, tab details and revisions. */
+export interface TabSettings {
+  /** 5th-string capo fret (6-12); null = match the main capo; 0 = the 5th string stays open. */
+  fifth_string_capo_fret: number | null;
+}
+
+export interface TabCreateRequest extends TabSettings {
   song_name: string;
   tuning_key: string;
   artist?: string | null;
@@ -103,7 +110,7 @@ export interface TabSummary {
   updated_at: string;
 }
 
-export interface TabDetail {
+export interface TabDetail extends TabSettings {
   id: string;
   song_name: string;
   artist: string | null;
@@ -156,7 +163,7 @@ export interface TabRevisionSummary {
 }
 
 /** Full snapshot of a past revision, restorable via the restore endpoint. */
-export interface TabRevisionDetail {
+export interface TabRevisionDetail extends TabSettings {
   id: string;
   tab_id: string;
   created_at: string;

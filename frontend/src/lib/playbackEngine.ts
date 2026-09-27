@@ -8,7 +8,13 @@
  * sounding.
  */
 import { applyFadeEnvelope, synthesizePitchChange, synthesizePluck, synthesizeSlide } from "./pluckSynth";
-import { computePlaybackSchedule, totalDurationSeconds, type SoundEvent, type TimedNote } from "./tabLayout";
+import {
+  computePlaybackSchedule,
+  totalDurationSeconds,
+  type ScheduleOptions,
+  type SoundEvent,
+  type TimedNote,
+} from "./tabLayout";
 import type { NoteOut, TuningOut } from "../types/api";
 
 /** Render one string's sound for a note, shaped by its technique. */
@@ -41,6 +47,11 @@ function synthesizeSound(sound: SoundEvent, sampleRate: number, durationSeconds:
   return synthesizePluck({ ...common, frequency: sound.frequency });
 }
 
+export interface PlayOptions extends ScheduleOptions {
+  /** Repeat just the notes between these positions (inclusive) until stopped. */
+  loop?: { startPosition: number; endPosition: number };
+}
+
 export interface PlaybackCallbacks {
   onProgress?: (currentNoteId: string | null, elapsedSeconds: number) => void;
   onEnded?: () => void;
@@ -64,10 +75,7 @@ export class TabPlaybackEngine {
     tuning: TuningOut;
     tempoBpm: number;
     transposeSemitones: number;
-    capoFret: number;
-    clawhammerTiming: boolean;
-    startPosition: number;
-    endPosition: number;
+    options: PlayOptions;
   } | null = null;
 
   constructor(callbacks: PlaybackCallbacks = {}) {
@@ -91,33 +99,18 @@ export class TabPlaybackEngine {
     tuning: TuningOut,
     tempoBpm: number,
     transposeSemitones: number,
-    options: {
-      capoFret?: number;
-      clawhammerTiming?: boolean;
-      loop?: { startPosition: number; endPosition: number };
-    } = {},
+    options: PlayOptions = {},
   ): void {
     this.stop();
     const ctx = this.ensureContext();
-    const capoFret = options.capoFret ?? 0;
-    const clawhammerTiming = options.clawhammerTiming ?? false;
     let scheduleNotes = notes;
     if (options.loop) {
       const { startPosition, endPosition } = options.loop;
       scheduleNotes = notes.filter((n) => n.position >= startPosition && n.position <= endPosition);
     }
-    this.schedule = computePlaybackSchedule(
-      scheduleNotes,
-      tuning,
-      tempoBpm,
-      transposeSemitones,
-      capoFret,
-      clawhammerTiming,
-    );
+    this.schedule = computePlaybackSchedule(scheduleNotes, tuning, tempoBpm, transposeSemitones, options);
     this.durationSeconds = totalDurationSeconds(scheduleNotes, tempoBpm);
-    this.loopOptions = options.loop
-      ? { notes, tuning, tempoBpm, transposeSemitones, capoFret, clawhammerTiming, ...options.loop }
-      : null;
+    this.loopOptions = options.loop ? { notes, tuning, tempoBpm, transposeSemitones, options } : null;
     this.startedAtContextTime = ctx.currentTime + 0.05;
     this.playing = true;
 
@@ -150,13 +143,9 @@ export class TabPlaybackEngine {
       if (!this.playing) return;
       if (this.loopOptions) {
         // Restart the same looped region seamlessly rather than stopping.
-        const { notes: loopNotes, tuning: loopTuning, tempoBpm: loopTempo, transposeSemitones: loopTranspose, capoFret: loopCapo, clawhammerTiming: loopClawhammer, startPosition, endPosition } =
+        const { notes: loopNotes, tuning: loopTuning, tempoBpm: loopTempo, transposeSemitones: loopTranspose, options: loopOptions } =
           this.loopOptions;
-        this.play(loopNotes, loopTuning, loopTempo, loopTranspose, {
-          capoFret: loopCapo,
-          clawhammerTiming: loopClawhammer,
-          loop: { startPosition, endPosition },
-        });
+        this.play(loopNotes, loopTuning, loopTempo, loopTranspose, loopOptions);
       } else {
         this.playing = false;
         this.callbacks.onEnded?.();

@@ -88,6 +88,10 @@ class Tab(Base):
     # Clawhammer mode: notes may set `thumb_after` to pluck the 5th string on
     # the off-beat after them.
     clawhammer_timing: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 5th-string capo/spike, as the fret it sits at (6-12; raises the 5th
+    # string by fret - 5 semitones). NULL = the 5th string matches the main
+    # capo (as if spiked to match); 0 = the 5th string is left open.
+    fifth_string_capo_fret: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     status: Mapped[TabStatus] = mapped_column(
         Enum(TabStatus, native_enum=False), default=TabStatus.draft, index=True

@@ -82,6 +82,7 @@ def tab_to_detail(tab: Tab, vote_count: int, has_voted: bool) -> TabDetail:
         created_at=tab.created_at,
         updated_at=tab.updated_at,
         notes=[note_to_out(n) for n in sorted(tab.notes, key=lambda n: n.position)],
+        fifth_string_capo_fret=tab.fifth_string_capo_fret,
     )
 
 
@@ -134,4 +135,5 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
         bars_per_line=snapshot.get("bars_per_line", 4),
         clawhammer_timing=snapshot.get("clawhammer_timing", False),
         notes=notes_out,
+        fifth_string_capo_fret=snapshot.get("fifth_string_capo_fret"),
     )

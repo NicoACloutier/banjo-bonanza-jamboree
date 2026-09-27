@@ -9,6 +9,7 @@ import { TabEditor, type TabMetadata, createEmptyNote } from "../components/TabE
 import { useAuth } from "../hooks/useAuth";
 import { TabsApi } from "../lib/api";
 import { ApiRequestError } from "../lib/apiClient";
+import { DEFAULT_TAB_SETTINGS } from "../lib/tabSettings";
 import { FALLBACK_TUNINGS } from "../lib/tunings";
 import type { NoteIn, NoteOut, TuningOut } from "../types/api";
 
@@ -47,6 +48,7 @@ export function TabEditorPage() {
     capoFret: 0,
     barsPerLine: 4,
     clawhammerTiming: false,
+    settings: DEFAULT_TAB_SETTINGS,
   });
   const [notes, setNotes] = useState<NoteOut[]>(() =>
     // New tabs start with 10 empty (rest) note slots the user can click to
@@ -78,6 +80,9 @@ export function TabEditorPage() {
           capoFret: tab.capo_fret,
           barsPerLine: tab.bars_per_line,
           clawhammerTiming: tab.clawhammer_timing,
+          settings: {
+            fifth_string_capo_fret: tab.fifth_string_capo_fret,
+          },
         });
         setNotes(tab.notes);
       })
@@ -107,6 +112,7 @@ export function TabEditorPage() {
           capo_fret: metadata.capoFret,
           bars_per_line: metadata.barsPerLine,
           clawhammer_timing: metadata.clawhammerTiming,
+          ...metadata.settings,
           notes: notesToNoteIn(notes),
           publish,
         };

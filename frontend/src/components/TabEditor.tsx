@@ -17,8 +17,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TabRenderer } from "./TabRenderer";
+import { TabSettingsFields } from "./TabSettingsFields";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
-import type { NoteFretIn, NoteOut, RightHandFinger, Technique, TuningOut } from "../types/api";
+import { playOptionsFor } from "../lib/tabSettings";
+import type { NoteFretIn, NoteOut, RightHandFinger, TabSettings, Technique, TuningOut } from "../types/api";
 
 export interface TabMetadata {
   songName: string;
@@ -32,6 +34,8 @@ export interface TabMetadata {
   barsPerLine: number;
   /** Clawhammer mode: notes can add a 5th-string thumb pluck after them (`thumb_after`). */
   clawhammerTiming: boolean;
+  /** 5th-string capo. */
+  settings: TabSettings;
 }
 
 interface TabEditorProps {
@@ -217,14 +221,18 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
     return () => engine.dispose();
   }, []);
 
+  const tuning = tunings.find((t) => t.key === metadata.tuningKey) ?? tunings[0];
+
   const play = (fromNote: NoteOut | null) => {
-    const tuning = tunings.find((t) => t.key === metadata.tuningKey) ?? tunings[0];
     if (!tuning) return;
     const playNotes = fromNote ? notes.filter((n) => n.position >= fromNote.position) : notes;
-    engineRef.current?.play(playNotes, tuning, metadata.tempoBpm, transposeSemitones, {
-      capoFret: metadata.capoFret,
-      clawhammerTiming: metadata.clawhammerTiming,
-    });
+    engineRef.current?.play(
+      playNotes,
+      tuning,
+      metadata.tempoBpm,
+      transposeSemitones,
+      playOptionsFor({ ...metadata.settings, capo_fret: metadata.capoFret, clawhammer_timing: metadata.clawhammerTiming }),
+    );
     setIsPlaying(true);
   };
 
@@ -463,6 +471,11 @@ export function TabEditor({ tunings, metadata, onMetadataChange, notes, onNotesC
           />
         </label>
       </div>
+
+      <TabSettingsFields
+        settings={metadata.settings}
+        onChange={(settings) => onMetadataChange({ ...metadata, settings })}
+      />
 
       <label className="checkbox-label">
         <input

@@ -23,6 +23,21 @@ export interface SoundEvent {
   fromFrequency?: number;
 }
 
+/** How far the 5th string is raised: its own capo/spike if it has one, otherwise the main capo. */
+export function fifthStringRaise(capoFret: number, fifthStringCapoFret: number | null): number {
+  if (fifthStringCapoFret === null) return capoFret;
+  return fifthStringCapoFret === 0 ? 0 : fifthStringCapoFret - 5;
+}
+
+export interface ScheduleOptions {
+  /** Main capo fret (0 = none); raises strings 1-4 (and the 5th, unless it has its own capo). */
+  capoFret?: number;
+  /** 5th-string capo/spike fret: null = match the main capo, 0 = open, 6-12 = spiked there. */
+  fifthStringCapoFret?: number | null;
+  /** Clawhammer mode: notes' `thumb_after` plucks sound. */
+  clawhammerTiming?: boolean;
+}
+
 /**
  * The fret a hammer-on/pull-off to `fret` starts from: the last fret played
  * on that string, or, with nothing (different) before it, the open string for
@@ -55,10 +70,11 @@ export interface TimedNote extends NoteOut {
  * schedule entry whose `sounds` array has one item per string, all sharing
  * the same start time so they ring out together.
  *
- * `capoFret` raises every string's sounding pitch by that many frets (a
- * physical capo shortens the vibrating string length), independent of
- * `transposeSemitones` (which is purely a playback preview, e.g. "hear
- * this tuning down 1 fret" -- it does not reflect a physical capo).
+ * The capo raises every string's sounding pitch by that many frets (a
+ * physical capo shortens the vibrating string length), except that the 5th
+ * string follows its own capo/spike when it has one (see
+ * `fifthStringRaise`). This is independent of `transposeSemitones`, which
+ * is purely a playback preview (e.g. "hear this tuning down 1 fret").
  *
  * Hammer-ons and pull-offs take the same time as a plain note, but are
  * plucked at the previous fret on that string and change to the written
@@ -74,10 +90,13 @@ export function computePlaybackSchedule(
   tuning: TuningOut,
   tempoBpm: number,
   transposeSemitones: number,
-  capoFret = 0,
-  clawhammerTiming = false,
+  options: ScheduleOptions = {},
 ): TimedNote[] {
+  const { capoFret = 0, fifthStringCapoFret = null, clawhammerTiming = false } = options;
   const secondsPerBeat = 60 / tempoBpm;
+  const capoFor = (stringNumber: number) =>
+    stringNumber === 5 ? fifthStringRaise(capoFret, fifthStringCapoFret) : capoFret;
+
   const sorted = [...notes].sort((a, b) => a.position - b.position);
   let elapsed = 0;
   const timed: TimedNote[] = [];
@@ -88,42 +107,35 @@ export function computePlaybackSchedule(
     if (!note.is_rest && note.frets.length > 0) {
       const sounds: SoundEvent[] = [];
       for (const fretEvent of note.frets) {
-        const openString = tuning.open_strings[fretEvent.string_number - 1];
+        const stringNumber = fretEvent.string_number;
+        const openString = tuning.open_strings[stringNumber - 1];
         // Defensive: an out-of-range string_number (which should never
         // happen given server-side validation, but could occur with
         // stale/malformed client-side data) must not crash the whole
         // schedule -- skip just this string's sound rather than throwing.
         if (openString === undefined) continue;
-        const effectiveFret = fretEvent.fret + capoFret;
-        const frequency = frettedFrequency(openString, effectiveFret, transposeSemitones);
+        const capo = capoFor(stringNumber);
+        const frequency = frettedFrequency(openString, fretEvent.fret + capo, transposeSemitones);
         const sound: SoundEvent = {
-          stringNumber: fretEvent.string_number,
+          stringNumber,
           fret: fretEvent.fret,
           technique: fretEvent.technique,
           frequency,
         };
         if (fretEvent.technique === "slide" && fretEvent.slide_to_fret != null) {
-          sound.slideToFrequency = frettedFrequency(
-            openString,
-            fretEvent.slide_to_fret + capoFret,
-            transposeSemitones,
-          );
+          sound.slideToFrequency = frettedFrequency(openString, fretEvent.slide_to_fret + capo, transposeSemitones);
         }
         if (fretEvent.technique === "bend" && fretEvent.bend_semitones != null) {
           sound.bendToFrequency = frequency * Math.pow(2, fretEvent.bend_semitones / 12);
         }
         if (fretEvent.technique === "hammer_on" || fretEvent.technique === "pull_off") {
-          const fromFret = legatoFromFret(
-            fretEvent.technique,
-            fretEvent.fret,
-            lastFretByString.get(fretEvent.string_number),
-          );
+          const fromFret = legatoFromFret(fretEvent.technique, fretEvent.fret, lastFretByString.get(stringNumber));
           if (fromFret !== null) {
-            sound.fromFrequency = frettedFrequency(openString, fromFret + capoFret, transposeSemitones);
+            sound.fromFrequency = frettedFrequency(openString, fromFret + capo, transposeSemitones);
           }
         }
         lastFretByString.set(
-          fretEvent.string_number,
+          stringNumber,
           fretEvent.technique === "slide" && fretEvent.slide_to_fret != null ? fretEvent.slide_to_fret : fretEvent.fret,
         );
         sounds.push(sound);
@@ -143,7 +155,7 @@ export function computePlaybackSchedule(
             stringNumber: 5,
             fret: 0,
             technique: "normal",
-            frequency: frettedFrequency(tuning.open_strings[4], capoFret, transposeSemitones),
+            frequency: frettedFrequency(tuning.open_strings[4], capoFor(5), transposeSemitones),
           },
         ],
       });

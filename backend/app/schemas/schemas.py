@@ -146,6 +146,8 @@ class TabCreateRequest(msgspec.Struct):
     bars_per_line: int = 4
     # Clawhammer mode: enables notes' `thumb_after` 5th-string plucks.
     clawhammer_timing: bool = False
+    # 5th-string capo fret (6-12); None = match the main capo; 0 = open.
+    fifth_string_capo_fret: int | None = None
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
 
@@ -159,6 +161,7 @@ class TabUpdateRequest(msgspec.Struct):
     capo_fret: int = 0
     bars_per_line: int = 4
     clawhammer_timing: bool = False
+    fifth_string_capo_fret: int | None = None
     notes: list[NoteIn] = msgspec.field(default_factory=list)
     publish: bool = False
 
@@ -198,6 +201,7 @@ class TabDetail(msgspec.Struct):
     created_at: datetime
     updated_at: datetime
     notes: list[NoteOut]
+    fifth_string_capo_fret: int | None = None
 
 
 class TabListResponse(msgspec.Struct):
@@ -253,3 +257,4 @@ class TabRevisionDetail(msgspec.Struct):
     bars_per_line: int
     clawhammer_timing: bool
     notes: list[NoteOut]
+    fifth_string_capo_fret: int | None = None

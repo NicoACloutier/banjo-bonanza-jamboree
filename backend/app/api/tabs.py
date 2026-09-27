@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import msgspec
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -48,7 +48,11 @@ from app.services.converters import (
 
 router = APIRouter(prefix="/api/tabs", tags=["tabs"])
 
-_TAB_LOAD_OPTIONS = (selectinload(Tab.owner), selectinload(Tab.notes).selectinload(Note.lyric), selectinload(Tab.notes).selectinload(Note.frets))
+_TAB_LOAD_OPTIONS = (
+    selectinload(Tab.owner),
+    selectinload(Tab.notes).selectinload(Note.lyric),
+    selectinload(Tab.notes).selectinload(Note.frets),
+)
 
 _MAX_REVISIONS_PER_TAB = 50
 _MAX_CAPO_FRET = 12
@@ -79,6 +83,27 @@ async def _has_voted(db: AsyncSession, tab_id: str, user_id: str | None) -> bool
     return result.scalar_one_or_none() is not None
 
 
+async def _load_tab(db: AsyncSession, tab_id: str) -> Tab | None:
+    result = await db.execute(
+        select(Tab).where(Tab.id == tab_id).options(*_TAB_LOAD_OPTIONS).execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _detail_response(
+    db: AsyncSession, tab: Tab, user: User | None, status_code: int = status.HTTP_200_OK
+) -> MsgspecResponse:
+    user_id = user.id if user else None
+    return MsgspecResponse(
+        tab_to_detail(
+            tab,
+            vote_count=await _vote_count(db, tab.id),
+            has_voted=await _has_voted(db, tab.id, user_id),
+        ),
+        status_code=status_code,
+    )
+
+
 def _validate_tuning(tuning_key: str) -> None:
     if tuning_key not in TUNINGS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown tuning: {tuning_key}")
@@ -98,6 +123,35 @@ def _validate_bars_per_line(bars_per_line: int) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="bars_per_line must be 1, 2, or 4.",
         )
+
+
+def _bad_request(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+def _validate_tab_request(body: TabCreateRequest | TabUpdateRequest) -> None:
+    """Validate every field of a create/update request (or a revision snapshot)."""
+    _validate_tuning(body.tuning_key)
+    _validate_capo(body.capo_fret)
+    _validate_bars_per_line(body.bars_per_line)
+    fifth = body.fifth_string_capo_fret
+    if fifth is not None and fifth != 0 and not (6 <= fifth <= _MAX_CAPO_FRET):
+        raise _bad_request(f"fifth_string_capo_fret must be 0 (open) or between 6 and {_MAX_CAPO_FRET}.")
+    _validate_notes(body.notes)
+
+
+def _apply_tab_request(tab: Tab, body: TabCreateRequest | TabUpdateRequest) -> None:
+    """Copy a validated request's tab-level fields onto `tab` (notes are handled by `_replace_notes`)."""
+    tab.song_name = body.song_name.strip()
+    tab.artist = body.artist or None
+    tab.album = body.album or None
+    tab.tuning_key = body.tuning_key
+    tab.tempo_bpm = max(20, min(400, body.tempo_bpm))
+    tab.capo_fret = body.capo_fret
+    tab.bars_per_line = body.bars_per_line
+    tab.clawhammer_timing = body.clawhammer_timing
+    tab.fifth_string_capo_fret = body.fifth_string_capo_fret
+    tab.status = TabStatus.published if body.publish else TabStatus.draft
 
 
 def _validate_notes(notes_in) -> None:
@@ -230,14 +284,9 @@ async def _replace_notes(db: AsyncSession, tab: Tab, notes_in) -> None:
             db.add(Lyric(tab_id=tab.id, note_id=note.id, text=note_in.lyric))
 
 
-async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
-    """
-    Persist a JSON snapshot of the tab's *current* editable state (before
-    the caller applies new changes to it), so the owner can browse/restore
-    history later. Also prunes the oldest revisions beyond
-    `_MAX_REVISIONS_PER_TAB` to bound storage.
-    """
-    snapshot = TabUpdateRequest(
+def _tab_as_request(tab: Tab) -> TabUpdateRequest:
+    """The tab's current editable state, in request form (`tab.notes` must be eager-loaded)."""
+    return TabUpdateRequest(
         song_name=tab.song_name,
         tuning_key=tab.tuning_key,
         artist=tab.artist,
@@ -246,6 +295,7 @@ async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
         capo_fret=tab.capo_fret,
         bars_per_line=tab.bars_per_line,
         clawhammer_timing=tab.clawhammer_timing,
+        fifth_string_capo_fret=tab.fifth_string_capo_fret,
         notes=[
             NoteIn(
                 position=n.position,
@@ -272,7 +322,16 @@ async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
         ],
         publish=tab.status == TabStatus.published,
     )
-    encoded = msgspec.json.encode(snapshot)
+
+
+async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
+    """
+    Persist a JSON snapshot of the tab's *current* editable state (before
+    the caller applies new changes to it), so the owner can browse/restore
+    history later. Also prunes the oldest revisions beyond
+    `_MAX_REVISIONS_PER_TAB` to bound storage.
+    """
+    encoded = msgspec.json.encode(_tab_as_request(tab))
     db.add(TabRevision(tab_id=tab.id, snapshot_json=encoded.decode("utf-8")))
     await db.flush()
 
@@ -294,10 +353,7 @@ async def create_tab(
     user: User | None = Depends(get_optional_user),
 ) -> MsgspecResponse:
     body = await parse_json_body(request, TabCreateRequest)
-    _validate_tuning(body.tuning_key)
-    _validate_capo(body.capo_fret)
-    _validate_bars_per_line(body.bars_per_line)
-    _validate_notes(body.notes)
+    _validate_tab_request(body)
 
     if user is None:
         # Anonymous users may only create tabs directly (published immediately);
@@ -311,30 +367,14 @@ async def create_tab(
     else:
         owner = user
 
-    tab = Tab(
-        owner_id=owner.id,
-        song_name=body.song_name.strip(),
-        artist=(body.artist or None),
-        album=(body.album or None),
-        tuning_key=body.tuning_key,
-        tempo_bpm=max(20, min(400, body.tempo_bpm)),
-        capo_fret=body.capo_fret,
-        bars_per_line=body.bars_per_line,
-        clawhammer_timing=body.clawhammer_timing,
-        status=TabStatus.published if body.publish else TabStatus.draft,
-    )
+    tab = Tab(owner_id=owner.id)
+    _apply_tab_request(tab, body)
     db.add(tab)
     await db.flush()
     await _replace_notes(db, tab, body.notes)
     await db.commit()
 
-    result = await db.execute(
-        select(Tab).where(Tab.id == tab.id).options(*_TAB_LOAD_OPTIONS).execution_options(populate_existing=True)
-    )
-    tab = result.scalar_one()
-    return MsgspecResponse(
-        tab_to_detail(tab, vote_count=0, has_voted=False), status_code=status.HTTP_201_CREATED
-    )
+    return await _detail_response(db, await _load_tab(db, tab.id), user, status_code=status.HTTP_201_CREATED)
 
 
 @router.get("")
@@ -345,21 +385,20 @@ async def search_tabs(
     db: AsyncSession = Depends(get_db),
 ) -> MsgspecResponse:
     """Search published tabs by song name, sorted by vote count (descending)."""
+    filters = [Tab.status == TabStatus.published]
+    if q:
+        filters.append(Tab.song_name.ilike(f"%{q}%"))
+
     vote_count_subq = (
         select(Vote.tab_id, func.count().label("vote_count")).group_by(Vote.tab_id).subquery()
     )
     base_query = (
         select(Tab, func.coalesce(vote_count_subq.c.vote_count, 0))
         .outerjoin(vote_count_subq, Tab.id == vote_count_subq.c.tab_id)
-        .where(Tab.status == TabStatus.published)
+        .where(*filters)
         .options(selectinload(Tab.owner))
     )
-    if q:
-        base_query = base_query.where(or_(Tab.song_name.ilike(f"%{q}%")))
-
-    count_query = select(func.count()).select_from(Tab).where(Tab.status == TabStatus.published)
-    if q:
-        count_query = count_query.where(Tab.song_name.ilike(f"%{q}%"))
+    count_query = select(func.count()).select_from(Tab).where(*filters)
     total = int((await db.execute(count_query)).scalar_one())
 
     base_query = (
@@ -401,9 +440,7 @@ async def get_tab(
     if tab.status == TabStatus.draft and (user is None or user.id != tab.owner_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tab not found.")
 
-    votes = await _vote_count(db, tab.id)
-    voted = await _has_voted(db, tab.id, user.id if user else None)
-    return MsgspecResponse(tab_to_detail(tab, vote_count=votes, has_voted=voted))
+    return await _detail_response(db, tab, user)
 
 
 @router.put("/{tab_id}")
@@ -414,10 +451,7 @@ async def update_tab(
     user: User = Depends(get_current_user),
 ) -> MsgspecResponse:
     body = await parse_json_body(request, TabUpdateRequest)
-    _validate_tuning(body.tuning_key)
-    _validate_capo(body.capo_fret)
-    _validate_bars_per_line(body.bars_per_line)
-    _validate_notes(body.notes)
+    _validate_tab_request(body)
 
     result = await db.execute(select(Tab).where(Tab.id == tab_id).options(*_TAB_LOAD_OPTIONS))
     tab = result.scalar_one_or_none()
@@ -430,25 +464,11 @@ async def update_tab(
     # this becomes a restorable point in its revision history.
     await _save_revision_snapshot(db, tab)
 
-    tab.song_name = body.song_name.strip()
-    tab.artist = body.artist or None
-    tab.album = body.album or None
-    tab.tuning_key = body.tuning_key
-    tab.tempo_bpm = max(20, min(400, body.tempo_bpm))
-    tab.capo_fret = body.capo_fret
-    tab.bars_per_line = body.bars_per_line
-    tab.clawhammer_timing = body.clawhammer_timing
-    tab.status = TabStatus.published if body.publish else TabStatus.draft
+    _apply_tab_request(tab, body)
     await _replace_notes(db, tab, body.notes)
     await db.commit()
 
-    result = await db.execute(
-        select(Tab).where(Tab.id == tab_id).options(*_TAB_LOAD_OPTIONS).execution_options(populate_existing=True)
-    )
-    tab = result.scalar_one()
-    votes = await _vote_count(db, tab.id)
-    voted = await _has_voted(db, tab.id, user.id)
-    return MsgspecResponse(tab_to_detail(tab, vote_count=votes, has_voted=voted))
+    return await _detail_response(db, await _load_tab(db, tab_id), user)
 
 
 @router.get("/{tab_id}/revisions")
@@ -523,32 +543,15 @@ async def restore_tab_revision(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Revision not found.")
 
     snapshot = msgspec.json.decode(revision.snapshot_json, type=TabUpdateRequest)
-    _validate_tuning(snapshot.tuning_key)
-    _validate_capo(snapshot.capo_fret)
-    _validate_bars_per_line(snapshot.bars_per_line)
-    _validate_notes(snapshot.notes)
+    _validate_tab_request(snapshot)
 
     await _save_revision_snapshot(db, tab)
 
-    tab.song_name = snapshot.song_name.strip()
-    tab.artist = snapshot.artist or None
-    tab.album = snapshot.album or None
-    tab.tuning_key = snapshot.tuning_key
-    tab.tempo_bpm = max(20, min(400, snapshot.tempo_bpm))
-    tab.capo_fret = snapshot.capo_fret
-    tab.bars_per_line = snapshot.bars_per_line
-    tab.clawhammer_timing = snapshot.clawhammer_timing
-    tab.status = TabStatus.published if snapshot.publish else TabStatus.draft
+    _apply_tab_request(tab, snapshot)
     await _replace_notes(db, tab, snapshot.notes)
     await db.commit()
 
-    result = await db.execute(
-        select(Tab).where(Tab.id == tab_id).options(*_TAB_LOAD_OPTIONS).execution_options(populate_existing=True)
-    )
-    tab = result.scalar_one()
-    votes = await _vote_count(db, tab.id)
-    voted = await _has_voted(db, tab.id, user.id)
-    return MsgspecResponse(tab_to_detail(tab, vote_count=votes, has_voted=voted))
+    return await _detail_response(db, await _load_tab(db, tab_id), user)
 
 
 @router.delete("/{tab_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)

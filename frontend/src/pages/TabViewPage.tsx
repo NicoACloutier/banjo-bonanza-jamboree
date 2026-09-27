@@ -15,6 +15,7 @@ import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
 import { Metronome } from "../lib/metronome";
 import { NOTES_PER_LINE } from "../lib/tabLayout";
+import { playOptionsFor } from "../lib/tabSettings";
 import type { TabDetail, TabRevisionSummary, TuningOut } from "../types/api";
 
 export function TabViewPage() {
@@ -112,11 +113,7 @@ export function TabViewPage() {
             return { startPosition: tab.notes[lo].position, endPosition: tab.notes[hi].position };
           })()
         : undefined;
-    engineRef.current?.play(tab.notes, tuning, tempoBpm, transposeSemitones, {
-      capoFret: tab.capo_fret,
-      clawhammerTiming: tab.clawhammer_timing,
-      loop,
-    });
+    engineRef.current?.play(tab.notes, tuning, tempoBpm, transposeSemitones, { ...playOptionsFor(tab), loop });
     setIsPlaying(true);
     if (autoScroll) {
       scrollIntervalRef.current = window.setInterval(() => {
@@ -200,6 +197,8 @@ export function TabViewPage() {
         {tab.album && <>· {tab.album} </>}
         · Tuning: {tuning.display_name}
         {tab.capo_fret > 0 && <> · Capo: fret {tab.capo_fret}</>}
+        {tab.fifth_string_capo_fret === 0 && tab.capo_fret > 0 && <> (5th string open)</>}
+        {!!tab.fifth_string_capo_fret && <> · 5th-string capo: fret {tab.fifth_string_capo_fret}</>}
         {tab.clawhammer_timing && <> · Clawhammer</>} · By{" "}
         <Link to={`/users/${tab.owner_username}`}>{tab.owner_username}</Link>
         {tab.status === "draft" && <span className="tag">DRAFT</span>}

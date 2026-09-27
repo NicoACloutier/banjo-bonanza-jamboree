@@ -3,8 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TabEditor, createEmptyNote, type TabMetadata } from "../components/TabEditor";
+import { DEFAULT_TAB_SETTINGS } from "../lib/tabSettings";
 import { FALLBACK_TUNINGS } from "../lib/tunings";
-import type { NoteOut } from "../types/api";
+import type { NoteOut, TabSettings } from "../types/api";
 
 // No Web Audio in the test environment: stand in for the playback engine.
 const enginePlay = vi.fn();
@@ -21,7 +22,13 @@ beforeEach(() => {
   engineStop.mockClear();
 });
 
-function Harness({ initialNotes = [] as NoteOut[] }: { initialNotes?: NoteOut[] }) {
+function Harness({
+  initialNotes = [] as NoteOut[],
+  settings = DEFAULT_TAB_SETTINGS,
+}: {
+  initialNotes?: NoteOut[];
+  settings?: TabSettings;
+}) {
   const [metadata, setMetadata] = useState<TabMetadata>({
     songName: "",
     artist: "",
@@ -31,6 +38,7 @@ function Harness({ initialNotes = [] as NoteOut[] }: { initialNotes?: NoteOut[] 
     capoFret: 0,
     barsPerLine: 4,
     clawhammerTiming: false,
+    settings,
   });
   const [notes, setNotes] = useState<NoteOut[]>(initialNotes);
   return (
@@ -301,7 +309,7 @@ describe("TabEditor", () => {
   it("allows setting a capo fret in the metadata form", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-    const capoInput = screen.getByLabelText(/capo/i);
+    const capoInput = screen.getByLabelText(/^capo \(fret/i);
     await user.clear(capoInput);
     await user.type(capoInput, "3");
     expect(capoInput).toHaveValue(3);
@@ -441,7 +449,7 @@ describe("TabEditor", () => {
     expect(playedNotes).toHaveLength(2);
     expect(tuning.key).toBe(FALLBACK_TUNINGS[0].key);
     expect([tempo, transpose]).toEqual([100, 0]);
-    expect(options).toEqual({ capoFret: 0, clawhammerTiming: false });
+    expect(options).toEqual({ capoFret: 0, fifthStringCapoFret: null, clawhammerTiming: false });
 
     await user.click(screen.getByRole("button", { name: /stop/i }));
     expect(engineStop).toHaveBeenCalled();

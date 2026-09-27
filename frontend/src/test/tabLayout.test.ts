@@ -156,15 +156,15 @@ describe("tabLayout", () => {
 
   it("raises every sounding pitch by the capo fret count, independent of transpose", () => {
     const notes = [makeNote({ frets: [makeFret({ string_number: 1, fret: 0 })] })];
-    const noCapo = computePlaybackSchedule(notes, tuning, 60, 0, 0)[0].sounds[0].frequency;
-    const capo2 = computePlaybackSchedule(notes, tuning, 60, 0, 2)[0].sounds[0].frequency;
+    const noCapo = computePlaybackSchedule(notes, tuning, 60, 0, { capoFret: 0 })[0].sounds[0].frequency;
+    const capo2 = computePlaybackSchedule(notes, tuning, 60, 0, { capoFret: 2 })[0].sounds[0].frequency;
     expect(capo2).toBeCloseTo(noCapo * Math.pow(2, 2 / 12), 3);
   });
 
   it("composes capo and transpose independently (both raise pitch additively)", () => {
     const notes = [makeNote({ frets: [makeFret({ string_number: 1, fret: 0 })] })];
-    const base = computePlaybackSchedule(notes, tuning, 60, 0, 0)[0].sounds[0].frequency;
-    const both = computePlaybackSchedule(notes, tuning, 60, 3, 2)[0].sounds[0].frequency;
+    const base = computePlaybackSchedule(notes, tuning, 60, 0, { capoFret: 0 })[0].sounds[0].frequency;
+    const both = computePlaybackSchedule(notes, tuning, 60, 3, { capoFret: 2 })[0].sounds[0].frequency;
     expect(both).toBeCloseTo(base * Math.pow(2, 5 / 12), 3);
   });
 
@@ -174,8 +174,8 @@ describe("tabLayout", () => {
         frets: [makeFret({ string_number: 1, fret: 2, technique: "slide", slide_to_fret: 4 })],
       }),
     ];
-    const noCapo = computePlaybackSchedule(notes, tuning, 60, 0, 0)[0].sounds[0];
-    const withCapo = computePlaybackSchedule(notes, tuning, 60, 0, 3)[0].sounds[0];
+    const noCapo = computePlaybackSchedule(notes, tuning, 60, 0, { capoFret: 0 })[0].sounds[0];
+    const withCapo = computePlaybackSchedule(notes, tuning, 60, 0, { capoFret: 3 })[0].sounds[0];
     expect(withCapo.frequency).toBeCloseTo(noCapo.frequency * Math.pow(2, 3 / 12), 3);
     expect(withCapo.slideToFrequency!).toBeCloseTo(noCapo.slideToFrequency! * Math.pow(2, 3 / 12), 3);
   });
@@ -213,7 +213,7 @@ describe("tabLayout", () => {
 
     it("plucks the open 5th string halfway through the note, taking no extra time", () => {
       const notes = [melody("a", 0, { thumb_after: true }), melody("b", 1)];
-      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, 0, true);
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, { clawhammerTiming: true });
       expect(schedule.map((n) => [n.id, n.startTimeSeconds, n.sounds[0].stringNumber])).toEqual([
         ["a", 0, 3],
         ["a", 0.5, 5],
@@ -226,26 +226,26 @@ describe("tabLayout", () => {
 
     it("scales with the note's duration", () => {
       const notes = [melody("a", 0, { duration_beats: 2, thumb_after: true })];
-      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, 0, true);
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, { clawhammerTiming: true });
       expect(schedule[1].startTimeSeconds).toBeCloseTo(1, 5);
     });
 
     it("can follow a rest", () => {
       const notes = [makeNote({ id: "r", position: 0, is_rest: true, frets: [], thumb_after: true })];
-      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, 0, true);
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, { clawhammerTiming: true });
       expect(schedule.map((n) => [n.startTimeSeconds, n.sounds[0].stringNumber])).toEqual([[0.5, 5]]);
     });
 
     it("applies the capo and transposition to the 5th string", () => {
       const notes = [melody("a", 0, { thumb_after: true })];
-      const plain = computePlaybackSchedule(notes, tuning, 60, 0, 0, true)[1].sounds[0].frequency;
-      const shifted = computePlaybackSchedule(notes, tuning, 60, 1, 2, true)[1].sounds[0].frequency;
+      const plain = computePlaybackSchedule(notes, tuning, 60, 0, { clawhammerTiming: true })[1].sounds[0].frequency;
+      const shifted = computePlaybackSchedule(notes, tuning, 60, 1, { capoFret: 2, clawhammerTiming: true })[1].sounds[0].frequency;
       expect(shifted / plain).toBeCloseTo(Math.pow(2, 3 / 12), 5);
     });
 
     it("is ignored when clawhammer mode is off", () => {
       const notes = [melody("a", 0, { thumb_after: true }), melody("b", 1)];
-      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, 0, false);
+      const schedule = computePlaybackSchedule(notes, tuning, 60, 0, { clawhammerTiming: false });
       expect(schedule.map((n) => n.startTimeSeconds)).toEqual([0, 1]);
     });
   });
@@ -300,7 +300,7 @@ describe("tabLayout", () => {
 
     it("applies the capo to the starting fret too", () => {
       const notes = [on("a", 0, 0), on("b", 1, 2, "hammer_on")];
-      const sound = computePlaybackSchedule(notes, tuning, 60, 0, 2)[1].sounds[0];
+      const sound = computePlaybackSchedule(notes, tuning, 60, 0, { capoFret: 2 })[1].sounds[0];
       expect(sound.fromFrequency).toBeCloseTo(g3(2), 3);
       expect(sound.frequency).toBeCloseTo(g3(4), 3);
     });
@@ -308,6 +308,32 @@ describe("tabLayout", () => {
     it("does not set a starting pitch for plain notes", () => {
       const schedule = computePlaybackSchedule([on("a", 0, 0), on("b", 1, 2)], tuning, 60, 0);
       expect(schedule[1].sounds[0].fromFrequency).toBeUndefined();
+    });
+  });
+
+  describe("5th-string capo", () => {
+    const fifth = [makeNote({ id: "f", frets: [makeFret({ string_number: 5, fret: 0 })] })];
+    const third = [makeNote({ id: "t", frets: [makeFret({ string_number: 3, fret: 0 })] })];
+    const freq = (notes: NoteOut[], options: object) => computePlaybackSchedule(notes, tuning, 60, 0, options)[0].sounds[0].frequency;
+    const g4 = frettedFrequency("G4", 0);
+
+    it("follows the main capo by default", () => {
+      expect(freq(fifth, { capoFret: 2 })).toBeCloseTo(g4 * Math.pow(2, 2 / 12), 5);
+    });
+
+    it("stays open, or is raised by its own capo (spike at fret N = N - 5 semitones)", () => {
+      expect(freq(fifth, { capoFret: 2, fifthStringCapoFret: 0 })).toBeCloseTo(g4, 5);
+      expect(freq(fifth, { capoFret: 0, fifthStringCapoFret: 7 })).toBeCloseTo(g4 * Math.pow(2, 2 / 12), 5);
+    });
+
+    it("doesn't affect strings 1-4", () => {
+      expect(freq(third, { capoFret: 2, fifthStringCapoFret: 0 })).toBeCloseTo(freq(third, { capoFret: 2 }), 5);
+    });
+
+    it("applies to clawhammer thumb plucks", () => {
+      const notes = [makeNote({ id: "a", thumb_after: true })];
+      const thumb = computePlaybackSchedule(notes, tuning, 60, 0, { clawhammerTiming: true, fifthStringCapoFret: 9 })[1];
+      expect(thumb.sounds[0].frequency).toBeCloseTo(g4 * Math.pow(2, 4 / 12), 5);
     });
   });
 });
