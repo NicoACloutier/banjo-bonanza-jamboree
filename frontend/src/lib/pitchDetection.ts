@@ -43,12 +43,12 @@ export function detectPitch(buffer: Float32Array, sampleRate: number): number | 
   // so without this bias we'd tend to lock onto a sub-harmonic.
   if (bestLag > 0) {
     const threshold = bestCorrelation * 0.9;
-    for (let i = 0; i < correlations.length; i++) {
-      if (correlations[i] >= threshold) {
-        bestLag = minLag + i;
-        break;
-      }
-    }
+    let i = correlations.findIndex((c) => c >= threshold);
+    // That first lag over the threshold is on the rising slope of its peak;
+    // climb to the top, or the interpolation below lands off the peak and
+    // every reading comes out biased (~20 cents flat on string-like tones).
+    while (i + 1 < correlations.length && correlations[i + 1] > correlations[i]) i++;
+    bestLag = minLag + i;
   }
 
   if (bestLag <= 0) return null;

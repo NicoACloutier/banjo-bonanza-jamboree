@@ -19,6 +19,38 @@ describe("detectPitch", () => {
     expect(Math.abs(detected! - 220)).toBeLessThan(2);
   });
 
+  // A string-like tone: a fundamental plus overtones (1/k amplitudes, fixed
+  // phases), decaying, as the live tuner sees it (a 2048-sample window).
+  function stringTone(frequency: number, sampleRate: number): Float32Array {
+    const buffer = new Float32Array(2048);
+    for (let i = 0; i < buffer.length; i++) {
+      const t = i / sampleRate;
+      let sample = 0;
+      for (let k = 1; k <= 8; k++) sample += Math.sin(2 * Math.PI * frequency * k * t + k) / k;
+      buffer[i] = 0.3 * sample * Math.exp(-1.5 * t);
+    }
+    return buffer;
+  }
+
+  it("is accurate to within 3 cents on string-like tones across the banjo's range", () => {
+    for (const sampleRate of [44100, 48000]) {
+      for (let frequency = 130; frequency <= 600; frequency *= 1.037) {
+        const detected = detectPitch(stringTone(frequency, sampleRate), sampleRate);
+        expect(Math.abs(centsOff(detected!, frequency)), `${frequency.toFixed(1)} Hz @ ${sampleRate}`).toBeLessThan(3);
+      }
+    }
+  });
+
+  it("has no systematic sharp/flat bias", () => {
+    let totalCents = 0;
+    let count = 0;
+    for (let frequency = 130; frequency <= 600; frequency *= 1.037) {
+      totalCents += centsOff(detectPitch(stringTone(frequency, 48000), 48000)!, frequency);
+      count++;
+    }
+    expect(Math.abs(totalCents / count)).toBeLessThan(0.5);
+  });
+
   it("returns null for silence", () => {
     const buffer = new Float32Array(4096); // all zeros
     expect(detectPitch(buffer, 44100)).toBeNull();
