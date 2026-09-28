@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findChordShapes, parseChord } from "../lib/chords";
+import { chordsInKey, findChordShapes, keyName, MAJOR_KEYS, MINOR_KEYS, parseChord, scaleForKey } from "../lib/chords";
 import { buildPattern, PATTERNS } from "../lib/patterns";
 import { getFallbackTuning } from "../lib/tunings";
 
@@ -98,5 +98,48 @@ describe("buildPattern", () => {
 
   it("explains unknown chords", () => {
     expect(() => buildPattern("forward", "Hm", tuning)).toThrow(/isn't a chord name/);
+  });
+});
+
+describe("chordsInKey", () => {
+  it("lists a major key's common chords: I ii iii IV V V7 vi", () => {
+    expect(chordsInKey("G")).toEqual(["G", "Am", "Bm", "C", "D", "D7", "Em"]);
+  });
+
+  it("lists a minor key's common chords: i III iv v V7 VI VII", () => {
+    expect(chordsInKey("Am")).toEqual(["Am", "C", "Dm", "Em", "E7", "F", "G"]);
+    expect(chordsInKey("Em")).toEqual(["Em", "G", "Am", "Bm", "B7", "C", "D"]);
+  });
+
+  it("spells sharp keys with sharps and flat keys with flats", () => {
+    expect(chordsInKey("E")).toEqual(["E", "F#m", "G#m", "A", "B", "B7", "C#m"]);
+    expect(chordsInKey("F#m")).toEqual(["F#m", "A", "Bm", "C#m", "C#7", "D", "E"]);
+    expect(chordsInKey("Bb")).toEqual(["Bb", "Cm", "Dm", "Eb", "F", "F7", "Gm"]);
+    expect(chordsInKey("Gm")).toEqual(["Gm", "Bb", "Cm", "Dm", "D7", "Eb", "F"]);
+  });
+
+  it("gives every listed key seven chords the chord finder understands", () => {
+    for (const key of [...MAJOR_KEYS, ...MINOR_KEYS]) {
+      const chords = chordsInKey(key);
+      expect(chords, key).toHaveLength(7);
+      for (const chord of chords) expect(parseChord(chord), `${key}: ${chord}`).not.toBeNull();
+    }
+  });
+
+  it("names keys by pitch, whichever way the tonic is spelled", () => {
+    expect(keyName("Db", true)).toBe("C#m");
+    expect(keyName("A#", false)).toBe("Bb");
+    expect(keyName("G", true)).toBe("Gm");
+    expect(keyName("H", false)).toBeNull();
+  });
+});
+
+describe("scaleForKey", () => {
+  it("gives a major key's scale in degree order", () => {
+    expect(scaleForKey("G")).toEqual([7, 9, 11, 0, 2, 4, 6]); // G A B C D E F#
+  });
+
+  it("gives a minor key's natural minor scale", () => {
+    expect(scaleForKey("Am")).toEqual([9, 11, 0, 2, 4, 5, 7]); // A B C D E F G
   });
 });

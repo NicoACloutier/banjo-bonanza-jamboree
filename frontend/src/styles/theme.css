@@ -478,6 +478,40 @@ label select {
   font-size: 0.7rem;
 }
 
+/* A key's scale on the neck, with each note numbered by scale degree. */
+.scale-diagram {
+  margin: 1.5rem 0 0;
+  color: var(--ink);
+}
+
+.scale-diagram figcaption {
+  margin-bottom: 0.5rem;
+}
+
+.scale-diagram-scroll {
+  overflow-x: auto;
+}
+
+.scale-note circle {
+  fill: var(--parchment);
+  stroke: var(--wood-plank);
+  stroke-width: 1.5;
+}
+
+.scale-note text {
+  fill: var(--ink);
+  font-weight: bold;
+}
+
+.scale-note.root circle {
+  fill: var(--ember-dark);
+  stroke: var(--ember-dark);
+}
+
+.scale-note.root text {
+  fill: var(--parchment);
+}
+
 .chord-grid {
   display: flex;
   flex-wrap: wrap;

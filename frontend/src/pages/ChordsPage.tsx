@@ -1,22 +1,14 @@
 /**
  * Chord finder: shapes for any chord in any tuning (with capo and 5th-string
- * capo), plus the common chords of a key, as diagrams.
+ * capo), plus the common chords of a key and its scale on the neck, as diagrams.
  */
 import { useState } from "react";
 import { ChordDiagram } from "../components/ChordDiagram";
-import { findChordShapes, parseChord } from "../lib/chords";
+import { ScaleDiagram } from "../components/ScaleDiagram";
+import { chordsInKey, findChordShapes, keyName, MAJOR_KEYS, MINOR_KEYS, parseChord } from "../lib/chords";
 import { fifthStringRaise } from "../lib/tabLayout";
 import { FIFTH_STRING_CAPO_OPTIONS } from "../lib/tabSettings";
 import { FALLBACK_TUNINGS, keyForTuning } from "../lib/tunings";
-
-const NOTE_NAMES = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
-
-/** The common chords of a major key: I, ii, iii, IV, V, V7, vi. */
-function chordsInKey(tonic: string): string[] {
-  const root = NOTE_NAMES.indexOf(tonic);
-  const at = (semitones: number, suffix = "") => NOTE_NAMES[(root + semitones) % 12] + suffix;
-  return [at(0), at(2, "m"), at(4, "m"), at(5), at(7), at(7, "7"), at(9, "m")];
-}
 
 export function ChordsPage() {
   const [tuningKey, setTuningKey] = useState(FALLBACK_TUNINGS[0].key);
@@ -24,10 +16,11 @@ export function ChordsPage() {
   const [fifthStringCapoFret, setFifthStringCapoFret] = useState<number | null>(null);
   const [chordName, setChordName] = useState("C");
   const tuning = FALLBACK_TUNINGS.find((t) => t.key === tuningKey) ?? FALLBACK_TUNINGS[0];
-  // Default the key to the one this tuning (and capo) plays in.
-  const tuningKeyTonic = keyForTuning(tuning.key, capoFret)?.tonic ?? "G";
+  // Default the key to the one this tuning (and capo) plays in (minor for minor tunings).
+  const tuningKeyInfo = keyForTuning(tuning.key, capoFret);
+  const defaultKey = tuningKeyInfo ? keyName(tuningKeyInfo.tonic, tuningKeyInfo.quality === "minor") : null;
   const [songKey, setSongKey] = useState<string | null>(null);
-  const tonic = songKey ?? tuningKeyTonic;
+  const key = songKey ?? defaultKey ?? "G";
 
   const shapeOptions = { capoFret, fifthStringRaise: fifthStringRaise(capoFret, fifthStringCapoFret) };
   const chord = parseChord(chordName);
@@ -98,16 +91,25 @@ export function ChordsPage() {
       <h2>Chords in a key</h2>
       <label>
         Key
-        <select value={tonic} onChange={(e) => setSongKey(e.target.value)}>
-          {NOTE_NAMES.map((note) => (
-            <option key={note} value={note}>
-              {note} major
-            </option>
-          ))}
+        <select value={key} onChange={(e) => setSongKey(e.target.value)}>
+          <optgroup label="Major">
+            {MAJOR_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {k} major
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Minor">
+            {MINOR_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {k.slice(0, -1)} minor
+              </option>
+            ))}
+          </optgroup>
         </select>
       </label>
       <div className="chord-grid">
-        {chordsInKey(tonic).map((name) => {
+        {chordsInKey(key).map((name) => {
           const [shape] = findChordShapes(parseChord(name)!, tuning.open_strings, { ...shapeOptions, limit: 1 });
           return shape ? (
             <ChordDiagram key={name} name={name} shape={shape} />
@@ -118,6 +120,12 @@ export function ChordsPage() {
           );
         })}
       </div>
+      <ScaleDiagram
+        songKey={key}
+        tuning={tuning}
+        capoFret={capoFret}
+        fifthStringRaise={shapeOptions.fifthStringRaise}
+      />
     </div>
   );
 }

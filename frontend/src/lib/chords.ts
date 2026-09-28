@@ -99,7 +99,8 @@ export interface ShapeOptions {
   limit?: number;
 }
 
-function pitchClassOf(note: string, semitonesUp: number): number {
+/** Pitch class (C = 0) of a note like "D4", raised `semitonesUp`. */
+export function pitchClassOf(note: string, semitonesUp = 0): number {
   // noteNameToSemitoneOffset is relative to A4 (A = 9 in C-based pitch classes).
   return (((noteNameToSemitoneOffset(note) + 9 + semitonesUp) % 12) + 12) % 12;
 }
@@ -147,4 +148,50 @@ export function findChordShapes(
     .sort((a, b) => a.score - b.score || a.frets.join(",").localeCompare(b.frets.join(",")))
     .slice(0, limit)
     .map(({ frets }) => ({ frets, fifthStringFits }));
+}
+
+/** Keys for the "chords in a key" chart, spelled as musicians usually write them. */
+export const MAJOR_KEYS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+export const MINOR_KEYS = ["Cm", "C#m", "Dm", "Ebm", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "Bbm", "Bm"];
+
+// Keys whose chords are spelled with flats; every other key uses sharps.
+const FLAT_KEYS = new Set(["F", "Bb", "Eb", "Ab", "Db", "Dm", "Gm", "Cm", "Fm", "Bbm", "Ebm"]);
+const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+
+/** The chart's name for a key, e.g. ("Db", minor) -> "C#m"; null if the tonic isn't a note name. */
+export function keyName(tonic: string, minor: boolean): string | null {
+  const pitchClass = PITCH_CLASS[tonic];
+  if (pitchClass === undefined) return null;
+  return (minor ? MINOR_KEYS : MAJOR_KEYS)[pitchClass];
+}
+
+/**
+ * The common chords of a key from MAJOR_KEYS or MINOR_KEYS. Major:
+ * I, ii, iii, IV, V, V7, vi. Minor: i, III, iv, v, V7 (the major V7 that
+ * leads back home), VI, VII.
+ */
+export function chordsInKey(key: string): string[] {
+  const minor = MINOR_KEYS.includes(key);
+  const root = PITCH_CLASS[minor ? key.slice(0, -1) : key];
+  if (root === undefined) return [];
+  const names = FLAT_KEYS.has(key) ? FLAT_NAMES : SHARP_NAMES;
+  const at = (semitones: number, suffix = "") => names[(root + semitones) % 12] + suffix;
+  return minor
+    ? [at(0, "m"), at(3), at(5, "m"), at(7, "m"), at(7, "7"), at(8), at(10)]
+    : [at(0), at(2, "m"), at(4, "m"), at(5), at(7), at(7, "7"), at(9, "m")];
+}
+
+const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
+const NATURAL_MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10];
+
+/**
+ * The scale of a key from MAJOR_KEYS or MINOR_KEYS (major, or natural minor):
+ * its pitch classes in degree order, so index 0 is degree 1 (the root).
+ */
+export function scaleForKey(key: string): number[] {
+  const minor = MINOR_KEYS.includes(key);
+  const root = PITCH_CLASS[minor ? key.slice(0, -1) : key];
+  if (root === undefined) return [];
+  return (minor ? NATURAL_MINOR_SCALE : MAJOR_SCALE).map((interval) => (root + interval) % 12);
 }
