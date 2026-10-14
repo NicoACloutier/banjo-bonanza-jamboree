@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
@@ -23,6 +24,26 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 def _split_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def normalize_database_url(url: str) -> str:
+    """
+    Adapt a plain PostgreSQL URL, as hosts like Neon hand out
+    (``postgres://`` or ``postgresql://...?sslmode=require``), for
+    SQLAlchemy's asyncpg driver: use the ``postgresql+asyncpg`` scheme,
+    rename ``sslmode`` to asyncpg's ``ssl``, and drop ``channel_binding``
+    (which asyncpg doesn't accept). Other URLs (e.g. SQLite) pass through.
+    """
+    parts = urlsplit(url)
+    scheme = "postgresql+asyncpg" if parts.scheme in ("postgres", "postgresql") else parts.scheme
+    if scheme != "postgresql+asyncpg":
+        return url
+    query = [
+        ("ssl" if key == "sslmode" else key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key != "channel_binding"
+    ]
+    return urlunsplit((scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +56,7 @@ class Settings:
 
     # --- Database ---
     # Example: postgresql+asyncpg://user:password@host:5432/banjo_tabs
-    database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./banjo_tabs.db")
+    database_url: str = normalize_database_url(os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./banjo_tabs.db"))
 
     # --- Auth / JWT ---
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "")
@@ -52,6 +73,9 @@ class Settings:
     cors_origins: list[str] = field(
         default_factory=lambda: _split_csv(os.getenv("CORS_ORIGINS", "http://localhost:5173"))
     )
+    # Optional regex for extra allowed origins, e.g. Cloudflare Pages preview
+    # deploys: ^https://([a-z0-9-]+\.)?my-site\.pages\.dev$
+    cors_origin_regex: str | None = os.getenv("CORS_ORIGIN_REGEX") or None
 
     # --- App info ---
     app_name: str = os.getenv("APP_NAME", "Banjo Bonanza Jamboree")

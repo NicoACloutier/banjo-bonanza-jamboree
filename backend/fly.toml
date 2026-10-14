@@ -1,0 +1,41 @@
+# Fly.io config for the backend API. Deploy from this directory with
+# `fly deploy` (see DEPLOYMENT.md). Secrets (DATABASE_URL, JWT_SECRET_KEY,
+# CORS_ORIGINS, GOOGLE_*) are set with `fly secrets set`, not here.
+
+app = "banjo-bonanza-jamboree-api"  # must be globally unique on Fly; change if taken
+primary_region = "iad"              # pick the region closest to your Neon database
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Bring the database schema up to date before each new release starts.
+  release_command = "alembic upgrade head"
+
+[env]
+  ENVIRONMENT = "production"
+  DEBUG = "false"
+  APP_NAME = "Banjo Bonanza Jamboree"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Keep one machine running so the site never waits for a cold start.
+  # (Set auto_stop_machines = "stop" and min_machines_running = 0 to pay
+  # only while it's in use, at the cost of a few seconds' wake-up.)
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # Argon2 password hashing uses 64 MB per login, so 256 MB could run out
+  # of memory with a couple of simultaneous logins.
+  memory = "512mb"

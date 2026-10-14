@@ -55,6 +55,12 @@ frontend/
     test/        # vitest unit + component tests
 ```
 
+## Deployment
+
+The site is set up to run with the frontend on Cloudflare Pages, the backend on
+Fly.io and the database on Neon (PostgreSQL). See [DEPLOYMENT.md](DEPLOYMENT.md)
+for step-by-step instructions.
+
 ## Getting started (local development)
 
 ### Backend
