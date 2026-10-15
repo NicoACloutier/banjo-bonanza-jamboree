@@ -49,6 +49,16 @@ async def client():
         yield ac
 
 
+@pytest_asyncio.fixture
+async def author_headers(client):
+    """Auth headers for a registered user ("tab_author"), for creating tabs."""
+    resp = await client.post(
+        "/api/auth/register",
+        json={"username": "tab_author", "email": "tab_author@example.com", "password": "Str0ngPassw0rd!"},
+    )
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"

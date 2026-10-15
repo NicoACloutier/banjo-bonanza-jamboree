@@ -17,23 +17,23 @@ def _tab(song_name="Cripple Creek", **fields):
     return {"song_name": song_name, "tuning_key": "standard_g", "notes": [_NOTE], "publish": True, **fields}
 
 
-async def test_fifth_string_capo_round_trips_and_defaults_to_matching_the_capo(client):
-    plain = (await client.post("/api/tabs", json=_tab())).json()
+async def test_fifth_string_capo_round_trips_and_defaults_to_matching_the_capo(client, author_headers):
+    plain = (await client.post("/api/tabs", json=_tab(), headers=author_headers)).json()
     assert plain["fifth_string_capo_fret"] is None
-    body = (await client.post("/api/tabs", json=_tab(fifth_string_capo_fret=7))).json()
+    body = (await client.post("/api/tabs", json=_tab(fifth_string_capo_fret=7), headers=author_headers)).json()
     assert (await client.get(f"/api/tabs/{body['id']}")).json()["fifth_string_capo_fret"] == 7
 
 
-async def test_open_fifth_string_capo_is_allowed(client):
-    resp = await client.post("/api/tabs", json=_tab(fifth_string_capo_fret=0))
+async def test_open_fifth_string_capo_is_allowed(client, author_headers):
+    resp = await client.post("/api/tabs", json=_tab(fifth_string_capo_fret=0), headers=author_headers)
     assert resp.status_code == 201
     assert resp.json()["fifth_string_capo_fret"] == 0
 
 
-async def test_rejects_invalid_fifth_string_capo(client):
+async def test_rejects_invalid_fifth_string_capo(client, author_headers):
     # The 5th string starts at fret 5, so a capo/spike sits at fret 6 or higher.
     for fret in [3, 5, 13]:
-        resp = await client.post("/api/tabs", json=_tab(fifth_string_capo_fret=fret))
+        resp = await client.post("/api/tabs", json=_tab(fifth_string_capo_fret=fret), headers=author_headers)
         assert resp.status_code == 400, fret
 
 

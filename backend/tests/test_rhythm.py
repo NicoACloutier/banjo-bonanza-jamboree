@@ -17,12 +17,12 @@ def _tab(song_name="Cripple Creek", **fields):
     return {"song_name": song_name, "tuning_key": "standard_g", "notes": [_NOTE], "publish": True, **fields}
 
 
-async def test_rhythm_note_fields_round_trip(client):
+async def test_rhythm_note_fields_round_trip(client, author_headers):
     notes = [
         {**_NOTE, "dotted": True},
         {**_NOTE, "position": 1, "duration_beats": 0.5, "triplet": True, "tied": True},
     ]
-    body = (await client.post("/api/tabs", json=_tab(notes=notes))).json()
+    body = (await client.post("/api/tabs", json=_tab(notes=notes), headers=author_headers)).json()
     fetched = (await client.get(f"/api/tabs/{body['id']}")).json()
     assert [(n["dotted"], n["triplet"], n["tied"]) for n in fetched["notes"]] == [
         (True, False, False),
@@ -30,17 +30,17 @@ async def test_rhythm_note_fields_round_trip(client):
     ]
 
 
-async def test_time_signature_and_swing_round_trip_with_defaults(client):
-    plain = (await client.post("/api/tabs", json=_tab())).json()
+async def test_time_signature_and_swing_round_trip_with_defaults(client, author_headers):
+    plain = (await client.post("/api/tabs", json=_tab(), headers=author_headers)).json()
     assert (plain["time_signature"], plain["swing"]) == (None, False)
-    body = (await client.post("/api/tabs", json=_tab(time_signature="6/8", swing=True))).json()
+    body = (await client.post("/api/tabs", json=_tab(time_signature="6/8", swing=True), headers=author_headers)).json()
     fetched = (await client.get(f"/api/tabs/{body['id']}")).json()
     assert (fetched["time_signature"], fetched["swing"]) == ("6/8", True)
 
 
-async def test_rejects_unknown_time_signatures(client):
+async def test_rejects_unknown_time_signatures(client, author_headers):
     for time_signature in ["5/4", "4", "4/4 "]:
-        resp = await client.post("/api/tabs", json=_tab(time_signature=time_signature))
+        resp = await client.post("/api/tabs", json=_tab(time_signature=time_signature), headers=author_headers)
         assert resp.status_code == 400, time_signature
 
 

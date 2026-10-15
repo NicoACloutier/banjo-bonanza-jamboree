@@ -17,7 +17,7 @@ async def _register_and_login(client, username="revuser", password="Str0ngPassw0
 # ---------------------------------------------------------------------------
 
 
-async def test_capo_fret_round_trips(client):
+async def test_capo_fret_round_trips(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -27,6 +27,7 @@ async def test_capo_fret_round_trips(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 0}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -36,7 +37,7 @@ async def test_capo_fret_round_trips(client):
     assert fetched.json()["capo_fret"] == 2
 
 
-async def test_capo_fret_defaults_to_zero(client):
+async def test_capo_fret_defaults_to_zero(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -45,12 +46,13 @@ async def test_capo_fret_defaults_to_zero(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 0}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     assert resp.json()["capo_fret"] == 0
 
 
-async def test_capo_fret_out_of_range_rejected(client):
+async def test_capo_fret_out_of_range_rejected(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -60,6 +62,7 @@ async def test_capo_fret_out_of_range_rejected(client):
             "notes": [],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
@@ -72,6 +75,7 @@ async def test_capo_fret_out_of_range_rejected(client):
             "notes": [],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp_negative.status_code == 400
 
@@ -81,7 +85,7 @@ async def test_capo_fret_out_of_range_rejected(client):
 # ---------------------------------------------------------------------------
 
 
-async def test_bars_per_line_round_trips(client):
+async def test_bars_per_line_round_trips(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -91,6 +95,7 @@ async def test_bars_per_line_round_trips(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 0}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -100,7 +105,7 @@ async def test_bars_per_line_round_trips(client):
     assert fetched.json()["bars_per_line"] == 2
 
 
-async def test_bars_per_line_defaults_to_four(client):
+async def test_bars_per_line_defaults_to_four(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -109,12 +114,13 @@ async def test_bars_per_line_defaults_to_four(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 0}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     assert resp.json()["bars_per_line"] == 4
 
 
-async def test_bars_per_line_rejects_invalid_values(client):
+async def test_bars_per_line_rejects_invalid_values(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -124,6 +130,7 @@ async def test_bars_per_line_rejects_invalid_values(client):
             "notes": [],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
@@ -133,7 +140,7 @@ async def test_bars_per_line_rejects_invalid_values(client):
 # ---------------------------------------------------------------------------
 
 
-async def test_bend_round_trips_with_semitones(client):
+async def test_bend_round_trips_with_semitones(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -148,6 +155,7 @@ async def test_bend_round_trips_with_semitones(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     fret = resp.json()["notes"][0]["frets"][0]
@@ -155,7 +163,7 @@ async def test_bend_round_trips_with_semitones(client):
     assert fret["bend_semitones"] == 2
 
 
-async def test_bend_requires_bend_semitones(client):
+async def test_bend_requires_bend_semitones(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -164,11 +172,12 @@ async def test_bend_requires_bend_semitones(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 2, "technique": "bend"}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_bend_semitones_out_of_range_rejected(client):
+async def test_bend_semitones_out_of_range_rejected(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -183,11 +192,12 @@ async def test_bend_semitones_out_of_range_rejected(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_bend_semitones_rejected_when_not_bending(client):
+async def test_bend_semitones_rejected_when_not_bending(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -198,11 +208,12 @@ async def test_bend_semitones_rejected_when_not_bending(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_drop_thumb_technique_round_trips(client):
+async def test_drop_thumb_technique_round_trips(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -217,12 +228,13 @@ async def test_drop_thumb_technique_round_trips(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     assert resp.json()["notes"][0]["frets"][0]["technique"] == "drop_thumb"
 
 
-async def test_right_hand_finger_annotation_round_trips(client):
+async def test_right_hand_finger_annotation_round_trips(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -247,6 +259,7 @@ async def test_right_hand_finger_annotation_round_trips(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     notes = sorted(resp.json()["notes"], key=lambda n: n["position"])
@@ -377,7 +390,7 @@ async def test_revisions_are_owner_only(client):
     assert resp.status_code == 403
 
 
-async def test_revision_endpoints_require_authentication(client):
+async def test_revision_endpoints_require_authentication(client, author_headers):
     create_resp = await client.post(
         "/api/tabs",
         json={
@@ -386,6 +399,7 @@ async def test_revision_endpoints_require_authentication(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": 0}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     tab_id = create_resp.json()["id"]
     resp = await client.get(f"/api/tabs/{tab_id}/revisions")

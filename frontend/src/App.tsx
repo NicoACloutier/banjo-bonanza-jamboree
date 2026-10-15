@@ -1,8 +1,8 @@
 /**
- * Application shell: routing table. Most routes are accessible without
- * authentication (browsing, playback, tab creation, tuner); only drafting
- * and voting require a logged-in user (enforced by the backend and
- * reflected contextually in the UI).
+ * Application shell: routing table. Browsing, playback, the tuner and the
+ * chord finder work without logging in; creating/editing tabs, voting and
+ * the library need an account (enforced by the backend and reflected in the
+ * UI).
  */
 import { Route, Routes } from "react-router-dom";
 import { Navbar } from "./components/Navbar";

@@ -18,7 +18,7 @@ async def _register_and_login(client, username="clawuser", password="Str0ngPassw
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
 
-async def test_clawhammer_timing_and_thumb_after_round_trip(client):
+async def test_clawhammer_timing_and_thumb_after_round_trip(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -28,6 +28,7 @@ async def test_clawhammer_timing_and_thumb_after_round_trip(client):
             "notes": _NOTES,
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -39,10 +40,11 @@ async def test_clawhammer_timing_and_thumb_after_round_trip(client):
     assert [n["thumb_after"] for n in fetched["notes"]] == [False, False, True]
 
 
-async def test_clawhammer_timing_defaults_off(client):
+async def test_clawhammer_timing_defaults_off(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={"song_name": "Default", "tuning_key": "standard_g", "notes": _NOTES[:2], "publish": True},
+        headers=author_headers,
     )
     assert resp.status_code == 201
     body = resp.json()

@@ -1,7 +1,8 @@
 /**
  * Top navigation bar. Shows different actions depending on auth state:
- * anonymous visitors can still browse/create/play tabs and use the tuner,
- * but only logged-in users see "My Tabs" / "Log out" (vs. "Log in").
+ * anonymous visitors can browse and play tabs and use the tuner and chord
+ * finder (New Tab asks them to log in), but only logged-in users see their
+ * library, "My Tabs" and "Log out" (vs. "Log in").
  */
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";

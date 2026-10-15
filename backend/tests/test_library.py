@@ -17,18 +17,18 @@ def _tab(song_name="Cripple Creek", **fields):
     return {"song_name": song_name, "tuning_key": "standard_g", "notes": [_NOTE], "publish": True, **fields}
 
 
-async def test_library_metadata_round_trips_with_defaults(client):
-    plain = (await client.post("/api/tabs", json=_tab())).json()
+async def test_library_metadata_round_trips_with_defaults(client, author_headers):
+    plain = (await client.post("/api/tabs", json=_tab(), headers=author_headers)).json()
     assert (plain["style"], plain["song_key"], plain["difficulty"]) == (None, None, None)
     fields = {"style": "clawhammer", "song_key": "F#m", "difficulty": "beginner"}
-    body = (await client.post("/api/tabs", json=_tab(**fields))).json()
+    body = (await client.post("/api/tabs", json=_tab(**fields), headers=author_headers)).json()
     fetched = (await client.get(f"/api/tabs/{body['id']}")).json()
     assert {k: fetched[k] for k in fields} == fields
 
 
-async def test_rejects_invalid_library_metadata(client):
+async def test_rejects_invalid_library_metadata(client, author_headers):
     for fields in [{"style": "polka"}, {"song_key": "H"}, {"song_key": "Gmaj"}, {"difficulty": "expert"}]:
-        resp = await client.post("/api/tabs", json=_tab(**fields))
+        resp = await client.post("/api/tabs", json=_tab(**fields), headers=author_headers)
         assert resp.status_code == 400, fields
 
 
@@ -44,11 +44,12 @@ async def test_library_metadata_is_kept_in_revisions(client):
     assert {k: restored[k] for k in fields} == fields
 
 
-async def test_search_filters_by_style_difficulty_tuning_and_key(client):
-    await client.post("/api/tabs", json=_tab("A", style="scruggs", difficulty="beginner", song_key="G"))
-    await client.post("/api/tabs", json=_tab("B", style="clawhammer", difficulty="beginner", song_key="D"))
+async def test_search_filters_by_style_difficulty_tuning_and_key(client, author_headers):
+    await client.post("/api/tabs", json=_tab("A", style="scruggs", difficulty="beginner", song_key="G"), headers=author_headers)
+    await client.post("/api/tabs", json=_tab("B", style="clawhammer", difficulty="beginner", song_key="D"), headers=author_headers)
     await client.post(
-        "/api/tabs", json=_tab("C", style="clawhammer", difficulty="advanced", tuning_key="double_c", song_key="C")
+        "/api/tabs", json=_tab("C", style="clawhammer", difficulty="advanced", tuning_key="double_c", song_key="C"),
+        headers=author_headers,
     )
 
     async def names(**params):
@@ -70,10 +71,10 @@ async def test_search_filters_by_style_difficulty_tuning_and_key(client):
 # ---------------------------------------------------------------------------
 
 
-async def test_favorite_toggle_and_list(client):
+async def test_favorite_toggle_and_list(client, author_headers):
     headers = await _login(client, "fan")
-    first = (await client.post("/api/tabs", json=_tab("First"))).json()
-    second = (await client.post("/api/tabs", json=_tab("Second"))).json()
+    first = (await client.post("/api/tabs", json=_tab("First"), headers=author_headers)).json()
+    second = (await client.post("/api/tabs", json=_tab("Second"), headers=author_headers)).json()
 
     assert (await client.post(f"/api/tabs/{first['id']}/favorite", headers=headers)).json()["is_favorited"] is True
     await client.post(f"/api/tabs/{second['id']}/favorite", headers=headers)
@@ -87,8 +88,8 @@ async def test_favorite_toggle_and_list(client):
     assert [t["song_name"] for t in favorites] == ["Second"]
 
 
-async def test_favorites_are_private_and_need_login(client):
-    tab = (await client.post("/api/tabs", json=_tab())).json()
+async def test_favorites_are_private_and_need_login(client, author_headers):
+    tab = (await client.post("/api/tabs", json=_tab(), headers=author_headers)).json()
     assert (await client.post(f"/api/tabs/{tab['id']}/favorite")).status_code == 401
     alice = await _login(client, "alice")
     bob = await _login(client, "bob")
@@ -134,10 +135,10 @@ async def test_fork_copies_tab_into_callers_draft(client):
     assert (await client.get(f"/api/tabs/{source['id']}")).json()["song_name"] == "Foggy"
 
 
-async def test_fork_requires_login_and_a_visible_tab(client):
+async def test_fork_requires_login_and_a_visible_tab(client, author_headers):
     owner = await _login(client, "owner2")
     other = await _login(client, "other2")
-    published = (await client.post("/api/tabs", json=_tab())).json()
+    published = (await client.post("/api/tabs", json=_tab(), headers=author_headers)).json()
     draft = (await client.post("/api/tabs", json=_tab(publish=False), headers=owner)).json()
     assert (await client.post(f"/api/tabs/{published['id']}/fork")).status_code == 401
     assert (await client.post(f"/api/tabs/{draft['id']}/fork", headers=other)).status_code == 404
@@ -160,10 +161,10 @@ async def test_fork_link_survives_source_deletion(client):
 # ---------------------------------------------------------------------------
 
 
-async def test_setlist_create_add_reorder_rename_delete(client):
+async def test_setlist_create_add_reorder_rename_delete(client, author_headers):
     headers = await _login(client, "jammer")
-    a = (await client.post("/api/tabs", json=_tab("A"))).json()
-    b = (await client.post("/api/tabs", json=_tab("B"))).json()
+    a = (await client.post("/api/tabs", json=_tab("A"), headers=author_headers)).json()
+    b = (await client.post("/api/tabs", json=_tab("B"), headers=author_headers)).json()
 
     created = await client.post("/api/setlists", json={"name": "  Friday jam  "}, headers=headers)
     assert created.status_code == 201

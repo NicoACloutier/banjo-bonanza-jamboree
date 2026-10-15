@@ -1,4 +1,4 @@
-"""Tests for tab creation (draft/publish/anonymous), editing, and deletion."""
+"""Tests for tab creation (draft/publish, login required), editing, and deletion."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def _sample_notes():
     ]
 
 
-async def test_rest_note_round_trips_and_advances_no_sound(client):
+async def test_rest_note_round_trips_and_advances_no_sound(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -43,6 +43,7 @@ async def test_rest_note_round_trips_and_advances_no_sound(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -59,7 +60,7 @@ async def test_rest_note_round_trips_and_advances_no_sound(client):
     ]
 
 
-async def test_chord_note_round_trips_with_multiple_strings(client):
+async def test_chord_note_round_trips_with_multiple_strings(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -78,6 +79,7 @@ async def test_chord_note_round_trips_with_multiple_strings(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -90,7 +92,7 @@ async def test_chord_note_round_trips_with_multiple_strings(client):
     assert len(fetched_frets) == 3
 
 
-async def test_hammer_on_pull_off_slide_round_trip(client):
+async def test_hammer_on_pull_off_slide_round_trip(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -127,6 +129,7 @@ async def test_hammer_on_pull_off_slide_round_trip(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -136,7 +139,7 @@ async def test_hammer_on_pull_off_slide_round_trip(client):
     assert notes[3]["frets"][0]["slide_to_fret"] == 4
 
 
-async def test_slide_requires_slide_to_fret(client):
+async def test_slide_requires_slide_to_fret(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -151,11 +154,12 @@ async def test_slide_requires_slide_to_fret(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_slide_to_same_fret_rejected(client):
+async def test_slide_to_same_fret_rejected(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -172,11 +176,12 @@ async def test_slide_to_same_fret_rejected(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_slide_to_fret_rejected_when_not_sliding(client):
+async def test_slide_to_fret_rejected_when_not_sliding(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -191,11 +196,12 @@ async def test_slide_to_fret_rejected_when_not_sliding(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_duplicate_string_in_chord_rejected(client):
+async def test_duplicate_string_in_chord_rejected(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -213,11 +219,12 @@ async def test_duplicate_string_in_chord_rejected(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_rest_with_frets_rejected(client):
+async def test_rest_with_frets_rejected(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -233,11 +240,12 @@ async def test_rest_with_frets_rejected(client):
             ],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_non_rest_note_with_no_frets_is_allowed_as_unfilled_placeholder(client):
+async def test_non_rest_note_with_no_frets_is_allowed_as_unfilled_placeholder(client, author_headers):
     # A non-rest note with zero frets is a valid "unfilled placeholder"
     # slot (e.g. one of the empty notes a freshly-created tab is seeded
     # with in the editor) -- it sounds nothing during playback, identical
@@ -251,11 +259,12 @@ async def test_non_rest_note_with_no_frets_is_allowed_as_unfilled_placeholder(cl
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": []}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
 
 
-async def test_create_tab_rejects_out_of_range_string_number(client):
+async def test_create_tab_rejects_out_of_range_string_number(client, author_headers):
     # Regression test: string_number outside 1..5 used to be accepted by
     # the API with no validation, which would later crash frontend
     # playback scheduling (indexing tuning.open_strings out of bounds).
@@ -267,6 +276,7 @@ async def test_create_tab_rejects_out_of_range_string_number(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 6, "fret": 0}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
@@ -278,11 +288,12 @@ async def test_create_tab_rejects_out_of_range_string_number(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 0, "fret": 0}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp_zero.status_code == 400
 
 
-async def test_create_tab_rejects_negative_fret(client):
+async def test_create_tab_rejects_negative_fret(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -291,11 +302,12 @@ async def test_create_tab_rejects_negative_fret(client):
             "notes": [{"position": 0, "duration_beats": 1.0, "frets": [{"string_number": 1, "fret": -1}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
 
-async def test_create_tab_rejects_non_positive_duration(client):
+async def test_create_tab_rejects_non_positive_duration(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -304,6 +316,7 @@ async def test_create_tab_rejects_non_positive_duration(client):
             "notes": [{"position": 0, "duration_beats": 0, "frets": [{"string_number": 1, "fret": 0}]}],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400
 
@@ -321,7 +334,24 @@ async def test_create_draft_requires_login(client):
     assert resp.status_code == 401
 
 
-async def test_anonymous_can_publish_directly(client):
+async def test_creating_a_tab_requires_login(client):
+    for publish in (True, False):
+        resp = await client.post(
+            "/api/tabs",
+            json={
+                "song_name": "Old Joe Clark",
+                "tuning_key": "standard_g",
+                "notes": _sample_notes(),
+                "publish": publish,
+            },
+        )
+        assert resp.status_code == 401
+    # Nothing was created, and no "Anonymous" owner was made.
+    assert (await client.get("/api/tabs")).json()["total"] == 0
+    assert (await client.get("/api/users/Anonymous")).status_code == 404
+
+
+async def test_logged_in_user_can_publish_directly(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -330,10 +360,11 @@ async def test_anonymous_can_publish_directly(client):
             "notes": _sample_notes(),
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
-    assert body["owner_username"] == "Anonymous"
+    assert body["owner_username"] == "tab_author"
     assert body["status"] == "published"
     assert len(body["notes"]) == 3
     assert body["notes"][0]["lyric"] == "Hello"
@@ -427,7 +458,7 @@ async def test_only_owner_can_edit_or_delete(client):
     assert delete_ok.status_code == 204
 
 
-async def test_invalid_tuning_rejected(client):
+async def test_invalid_tuning_rejected(client, author_headers):
     resp = await client.post(
         "/api/tabs",
         json={
@@ -436,5 +467,6 @@ async def test_invalid_tuning_rejected(client):
             "notes": [],
             "publish": True,
         },
+        headers=author_headers,
     )
     assert resp.status_code == 400

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.deps import ANONYMOUS_USERNAME, get_current_user, get_optional_user
+from app.core.deps import get_current_user, get_optional_user
 from app.core.msgspec_utils import MsgspecResponse, parse_json_body
 from app.core.tunings import TUNINGS, get_tuning
 from app.models.orm import (
@@ -68,16 +68,6 @@ DIFFICULTIES = {"beginner", "intermediate", "advanced"}
 # A key is a tonic, optionally sharp/flat, optionally minor: "G", "Bb", "F#m".
 _KEY_PATTERN = re.compile(r"^[A-G][#b]?m?$")
 _MAX_CHORD_NAME_LENGTH = 16
-
-
-async def _get_or_create_anonymous_user(db: AsyncSession) -> User:
-    result = await db.execute(select(User).where(User.username == ANONYMOUS_USERNAME))
-    user = result.scalar_one_or_none()
-    if user is None:
-        user = User(username=ANONYMOUS_USERNAME, email=None, hashed_password=None)
-        db.add(user)
-        await db.flush()
-    return user
 
 
 async def _vote_count(db: AsyncSession, tab_id: str) -> int:
@@ -397,24 +387,13 @@ async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
 async def create_tab(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_optional_user),
+    user: User = Depends(get_current_user),
 ) -> MsgspecResponse:
+    """Create a tab (as a draft, or published straight away) owned by the caller."""
     body = await parse_json_body(request, TabCreateRequest)
     _validate_tab_request(body)
 
-    if user is None:
-        # Anonymous users may only create tabs directly (published immediately);
-        # they cannot save drafts.
-        if not body.publish:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Log in to save drafts. Anonymous tabs are published immediately.",
-            )
-        owner = await _get_or_create_anonymous_user(db)
-    else:
-        owner = user
-
-    tab = Tab(owner_id=owner.id)
+    tab = Tab(owner_id=user.id)
     _apply_tab_request(tab, body)
     db.add(tab)
     await db.flush()

@@ -15,8 +15,9 @@ tablature, with an added tuner.
   teleprompter.
 - **Voting**: users can vote on their preferred tabs.
 - **Search**: search published tabs by song name, sorted by vote count.
-- **User profiles**: browse a specific user's published tabs. Login not
-  necessary to use software or create a tab.
+- **User profiles**: browse a specific user's published tabs. Browsing,
+  playback, the tuner and the chord finder work without logging in; creating
+  tabs needs an account.
 - **Tuner**: microphone-based pitch detection (autocorrelation), compared
   against the selected tuning (with optional transposition), with a simple
   sharp/flat meter.

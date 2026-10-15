@@ -1,10 +1,10 @@
 /**
- * Create/edit page for a tab. Anonymous visitors can create a tab, but it
- * is published immediately under "Anonymous" (no draft saving allowed);
- * logged-in users may save as a draft and publish later.
+ * Create/edit page for a tab. Creating and editing tabs needs an account:
+ * logged-out visitors are asked to log in or register instead. A tab can be
+ * saved as a draft or published.
  */
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { TabEditor, type TabMetadata, createEmptyNote } from "../components/TabEditor";
 import { useAuth } from "../hooks/useAuth";
 import { TabsApi } from "../lib/api";
@@ -39,7 +39,7 @@ function notesToNoteIn(notes: NoteOut[]): NoteIn[] {
 export function TabEditorPage() {
   const { tabId } = useParams();
   const isEditing = Boolean(tabId);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [tunings, setTunings] = useState<TuningOut[]>(FALLBACK_TUNINGS);
@@ -106,10 +106,6 @@ export function TabEditorPage() {
         setError("Song name is required.");
         return;
       }
-      if (!publish && !user) {
-        setError("Log in to save a draft. Anonymous tabs are published immediately.");
-        return;
-      }
       setSubmitting(true);
       try {
         const payload = {
@@ -133,20 +129,26 @@ export function TabEditorPage() {
         setSubmitting(false);
       }
     },
-    [metadata, notes, isEditing, tabId, user, navigate],
+    [metadata, notes, isEditing, tabId, navigate],
   );
 
-  if (loading) return <p>Loading...</p>;
+  if (loading || authLoading) return <p>Loading...</p>;
+
+  if (!user) {
+    return (
+      <div className="panel">
+        <h1>{isEditing ? "Edit Tab" : "Create a New Tab"}</h1>
+        <p>
+          You need an account to create and edit tabs. <Link to="/login">Log in</Link> or{" "}
+          <Link to="/register">register</Link>.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="panel">
       <h1>{isEditing ? "Edit Tab" : "Create a New Tab"}</h1>
-      {!user && (
-        <p className="muted-text">
-          You are not logged in: this tab will be created directly (published immediately) under the
-          username "Anonymous". Log in to save drafts and vote.
-        </p>
-      )}
       {error && <p className="error-banner">{error}</p>}
       <TabEditor
         tunings={tunings}
@@ -156,11 +158,9 @@ export function TabEditorPage() {
         onNotesChange={setNotes}
       />
       <div className="toolbar">
-        {user && (
-          <button className="secondary" disabled={submitting} onClick={() => submit(false)}>
-            Save Draft
-          </button>
-        )}
+        <button className="secondary" disabled={submitting} onClick={() => submit(false)}>
+          Save Draft
+        </button>
         <button disabled={submitting} onClick={() => submit(true)}>
           Publish
         </button>

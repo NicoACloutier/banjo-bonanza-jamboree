@@ -41,7 +41,7 @@ export const AuthApi = {
 export const TabsApi = {
   tunings: () => apiRequest<TuningOut[]>("/api/tabs/tunings", { auth: false }),
   create: (payload: TabCreateRequest) =>
-    apiRequest<TabDetail>("/api/tabs", { method: "POST", body: payload, auth: false }),
+    apiRequest<TabDetail>("/api/tabs", { method: "POST", body: payload }),
   update: (id: string, payload: TabUpdateRequest) =>
     apiRequest<TabDetail>(`/api/tabs/${id}`, { method: "PUT", body: payload }),
   get: (id: string) => apiRequest<TabDetail>(`/api/tabs/${id}`, { auth: false }),

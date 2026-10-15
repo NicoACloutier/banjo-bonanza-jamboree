@@ -4,9 +4,8 @@ FastAPI dependencies for authentication.
 `get_current_user` requires a valid access token.
 `get_optional_user` allows anonymous access (returns None if no/invalid
 token) -- used by endpoints that support both logged-in and anonymous
-users (browsing, playback), per the product requirement that anyone can
-view/play tabs and create tabs anonymously (attributed to "Anonymous"),
-but only authenticated users can vote or save drafts.
+users (browsing, playback): anyone can view and play tabs, but creating,
+editing, voting and the library features require an account.
 """
 
 from __future__ import annotations
@@ -23,6 +22,8 @@ from app.models.orm import User
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
+# Owner of the tabs created without an account before logging in was
+# required to create tabs. The name stays reserved (see auth.register).
 ANONYMOUS_USERNAME = "Anonymous"
 
 

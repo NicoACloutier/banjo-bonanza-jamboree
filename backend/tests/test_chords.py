@@ -17,18 +17,18 @@ def _tab(song_name="Cripple Creek", **fields):
     return {"song_name": song_name, "tuning_key": "standard_g", "notes": [_NOTE], "publish": True, **fields}
 
 
-async def test_chord_names_round_trip(client):
+async def test_chord_names_round_trip(client, author_headers):
     notes = [{**_NOTE, "chord": "G"}, {**_NOTE, "position": 1}, {**_NOTE, "position": 2, "chord": "D7"}]
-    body = (await client.post("/api/tabs", json=_tab(notes=notes))).json()
+    body = (await client.post("/api/tabs", json=_tab(notes=notes), headers=author_headers)).json()
     fetched = (await client.get(f"/api/tabs/{body['id']}")).json()
     assert [n["chord"] for n in fetched["notes"]] == ["G", None, "D7"]
 
 
-async def test_empty_chord_name_is_stored_as_none(client):
-    body = (await client.post("/api/tabs", json=_tab(notes=[{**_NOTE, "chord": ""}]))).json()
+async def test_empty_chord_name_is_stored_as_none(client, author_headers):
+    body = (await client.post("/api/tabs", json=_tab(notes=[{**_NOTE, "chord": ""}]), headers=author_headers)).json()
     assert body["notes"][0]["chord"] is None
 
 
-async def test_rejects_overlong_chord_names(client):
-    resp = await client.post("/api/tabs", json=_tab(notes=[{**_NOTE, "chord": "X" * 17}]))
+async def test_rejects_overlong_chord_names(client, author_headers):
+    resp = await client.post("/api/tabs", json=_tab(notes=[{**_NOTE, "chord": "X" * 17}]), headers=author_headers)
     assert resp.status_code == 400
