@@ -600,7 +600,8 @@ async def delete_tab(
     tab = result.scalar_one_or_none()
     if tab is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tab not found.")
-    if tab.owner_id != user.id:
+    # Owners can delete their own tabs; admins can delete anyone's.
+    if tab.owner_id != user.id and not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this tab.")
     await db.delete(tab)
     await db.commit()

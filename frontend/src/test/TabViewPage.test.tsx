@@ -37,7 +37,7 @@ const api = vi.hoisted(() => ({ remove: vi.fn(async () => undefined) }));
 vi.mock("../lib/api", () => ({
   TabsApi: { get: vi.fn(async () => tab), remove: api.remove },
 }));
-const auth = vi.hoisted(() => ({ current: { user: null as { id: string; username: string } | null } }));
+const auth = vi.hoisted(() => ({ current: { user: null as { id: string; username: string; is_admin?: boolean } | null } }));
 vi.mock("../hooks/useAuth", () => ({ useAuth: () => auth.current }));
 // No Web Audio in the test environment.
 vi.mock("../lib/playbackEngine", () => ({
@@ -126,10 +126,22 @@ describe("TabViewPage deleting", () => {
     expect(api.remove).not.toHaveBeenCalled();
   });
 
-  it("isn't offered to anyone but the owner", async () => {
-    auth.current = { user: { id: "someone-else", username: "ralph" } };
+  it("isn't offered to other users", async () => {
+    auth.current = { user: { id: "someone-else", username: "ralph", is_admin: false } };
     renderAt();
     await screen.findByRole("heading", { name: "Cripple Creek" });
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
+  it("lets admins delete someone else's tab, but not edit it", async () => {
+    auth.current = { user: { id: "admin", username: "mod", is_admin: true } };
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.getByText(/delete earl's tab as an admin\?/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /yes, delete/i }));
+    expect(api.remove).toHaveBeenCalledWith("t1");
+    expect(await screen.findByText("Profile page")).toBeInTheDocument();
   });
 });

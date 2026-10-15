@@ -27,9 +27,8 @@ from app.schemas.schemas import (
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
-    UserPublic,
 )
-from app.services.converters import user_to_public
+from app.services.converters import user_to_current
 from app.services.google_oauth import exchange_code_for_userinfo
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -156,4 +155,4 @@ async def google_login(request: Request, db: AsyncSession = Depends(get_db)) -> 
 
 @router.get("/me")
 async def me(user=Depends(get_current_user)) -> MsgspecResponse:
-    return MsgspecResponse(user_to_public(user))
+    return MsgspecResponse(user_to_current(user))

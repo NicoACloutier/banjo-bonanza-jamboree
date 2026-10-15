@@ -6,6 +6,7 @@ import msgspec
 
 from app.models.orm import Note, NoteFret, RightHandFinger, Tab, TabRevision, User
 from app.schemas.schemas import (
+    CurrentUser,
     ForkSource,
     NoteFretOut,
     NoteIn,
@@ -23,6 +24,10 @@ from app.schemas.schemas import (
 
 def user_to_public(user: User) -> UserPublic:
     return UserPublic(id=user.id, username=user.username, created_at=user.created_at)
+
+
+def user_to_current(user: User) -> CurrentUser:
+    return CurrentUser(id=user.id, username=user.username, created_at=user.created_at, is_admin=user.is_admin)
 
 
 def note_fret_to_out(fret: NoteFret) -> NoteFretOut:

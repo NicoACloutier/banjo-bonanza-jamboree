@@ -210,6 +210,8 @@ export function TabViewPage() {
   if (!tab || !tuning) return <p>Tab not found.</p>;
 
   const isOwner = user?.id === tab.owner_id;
+  // Admins can delete anyone's tab (but only owners can edit).
+  const canDelete = isOwner || Boolean(user?.is_admin);
 
   // The tab's details line, shown with " · " between whichever items apply.
   const details: ReactNode[] = [
@@ -252,7 +254,7 @@ export function TabViewPage() {
               History
             </button>
           )}
-          {isOwner && !confirmingDelete && (
+          {canDelete && !confirmingDelete && (
             <button className="secondary" onClick={() => setConfirmingDelete(true)}>
               Delete
             </button>
@@ -261,7 +263,11 @@ export function TabViewPage() {
       </div>
       {confirmingDelete && (
         <div className="toolbar no-print" role="alert">
-          <span>Delete this tab? This can't be undone.</span>
+          <span>
+            {isOwner
+              ? "Delete this tab? This can't be undone."
+              : `Delete ${tab.owner_username}'s tab as an admin? This can't be undone.`}
+          </span>
           <button onClick={handleDelete}>Yes, delete</button>
           <button className="secondary" onClick={() => setConfirmingDelete(false)}>
             Cancel

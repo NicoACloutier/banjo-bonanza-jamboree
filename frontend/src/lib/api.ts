@@ -4,6 +4,7 @@
  */
 import { apiRequest } from "./apiClient";
 import type {
+  CurrentUser,
   FavoriteResponse,
   TabCreateRequest,
   TabDetail,
@@ -33,7 +34,7 @@ export const AuthApi = {
     }),
   google: (code: string) =>
     apiRequest<TokenResponse>("/api/auth/google", { method: "POST", body: { code }, auth: false }),
-  me: () => apiRequest<UserPublic>("/api/auth/me"),
+  me: () => apiRequest<CurrentUser>("/api/auth/me"),
 };
 
 export const TabsApi = {

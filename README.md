@@ -14,6 +14,8 @@ tablature, with an added tuner.
 - **Auto-scroll**: adjustable-speed auto-scroll while playing, like a
   teleprompter.
 - **Voting**: users can vote on their preferred tabs.
+- **Moderation**: owners can delete their own tabs, and admins can delete
+  anyone's (`python -m app.cli make-admin <username>`; see DEPLOYMENT.md).
 - **Search**: search published tabs by song name, sorted by vote count.
 - **User profiles**: browse a specific user's published tabs. Browsing,
   playback, the tuner and the chord finder work without logging in; creating

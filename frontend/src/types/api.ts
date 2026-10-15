@@ -13,6 +13,11 @@ export interface UserPublic {
   created_at: string;
 }
 
+/** The logged-in user (from /api/auth/me). Admins can delete anyone's tab. */
+export interface CurrentUser extends UserPublic {
+  is_admin: boolean;
+}
+
 export interface TokenResponse {
   access_token: string;
   refresh_token: string;

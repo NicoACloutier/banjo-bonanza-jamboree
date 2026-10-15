@@ -57,6 +57,15 @@ class UserPublic(msgspec.Struct):
     created_at: datetime
 
 
+class CurrentUser(msgspec.Struct):
+    """The logged-in user, from /api/auth/me (includes what they're allowed to do)."""
+
+    id: str
+    username: str
+    created_at: datetime
+    is_admin: bool
+
+
 # ---------------------------------------------------------------------------
 # Notes / Lyrics
 # ---------------------------------------------------------------------------

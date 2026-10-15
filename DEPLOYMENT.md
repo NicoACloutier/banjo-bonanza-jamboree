@@ -111,6 +111,14 @@ fly secrets set CORS_ORIGIN_REGEX='^https://([a-z0-9-]+\.)?<project>\.pages\.dev
 ```
 Then open the site, register an account and create a tab.
 
+To make that account an admin (admins get a Delete button on every tab, for
+removing spam or abuse), run in `backend/`:
+```
+fly ssh console -C "python -m app.cli make-admin <username>"
+```
+Add `--revoke` to take admin rights away again. Locally, run
+`python -m app.cli make-admin <username>` in `backend/` instead.
+
 
 ## 5. Google sign-in (optional)
 

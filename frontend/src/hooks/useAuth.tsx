@@ -7,10 +7,10 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { AuthApi } from "../lib/api";
 import { clearTokens, getAccessToken, storeTokens } from "../lib/apiClient";
 import { clearCachedApiData } from "../lib/offline";
-import type { UserPublic } from "../types/api";
+import type { CurrentUser } from "../types/api";
 
 interface AuthContextValue {
-  user: UserPublic | null;
+  user: CurrentUser | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
@@ -21,7 +21,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserPublic | null>(null);
+  const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refreshCurrentUser = useCallback(async () => {

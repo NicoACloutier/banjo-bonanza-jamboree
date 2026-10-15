@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -43,6 +44,8 @@ class User(Base):
         String(255), unique=True, index=True, nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Admins can delete anyone's tab. Granted with `python -m app.cli make-admin`.
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     tabs: Mapped[list["Tab"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     votes: Mapped[list["Vote"]] = relationship(back_populates="user", cascade="all, delete-orphan")
