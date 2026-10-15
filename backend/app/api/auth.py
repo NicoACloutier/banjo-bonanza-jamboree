@@ -15,6 +15,7 @@ from app.core.deps import ANONYMOUS_USERNAME, get_current_user
 from app.core.msgspec_utils import MsgspecResponse, parse_json_body
 from app.core.rate_limit import SlidingWindowLimiter, client_ip, too_many_requests
 from app.core.security import (
+    MIN_PASSWORD_LENGTH,
     create_access_token,
     generate_refresh_token,
     hash_password,
@@ -64,10 +65,10 @@ async def register(request: Request, db: AsyncSession = Depends(get_db)) -> Msgs
         )
     if body.username.lower() == ANONYMOUS_USERNAME.lower():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username reserved.")
-    if len(body.password) < 8:
+    if len(body.password) < MIN_PASSWORD_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters.",
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
         )
 
     existing = await db.execute(

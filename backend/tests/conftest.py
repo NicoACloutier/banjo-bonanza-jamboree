@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.api import auth as auth_api
+from app.api import password_reset
 from app.core.database import Base, get_db
 from app.main import app
 
@@ -38,6 +39,8 @@ app.dependency_overrides[get_db] = _override_get_db
 def _reset_rate_limits():
     auth_api.login_attempts_per_ip.reset()
     auth_api.login_failures_per_account.reset()
+    password_reset.reset_requests_per_ip.reset()
+    password_reset.reset_requests_per_email.reset()
 
 
 @pytest_asyncio.fixture(autouse=True)

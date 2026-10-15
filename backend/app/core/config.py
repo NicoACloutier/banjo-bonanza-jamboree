@@ -84,6 +84,24 @@ class Settings:
     # deploys: ^https://([a-z0-9-]+\.)?my-site\.pages\.dev$
     cors_origin_regex: str | None = _env("CORS_ORIGIN_REGEX") or None
 
+    # --- Links in emails ---
+    # The site's address, for links such as password resets. Defaults to the
+    # first CORS origin, which is normally the same site.
+    frontend_url: str = (
+        _env("FRONTEND_URL") or (_split_csv(_env("CORS_ORIGINS", "http://localhost:5173")) or [""])[0]
+    ).rstrip("/")
+
+    # --- Email (SMTP) ---
+    # Without SMTP_HOST no email is sent; in development the message is
+    # logged instead, so links can be copied from the server output.
+    smtp_host: str = _env("SMTP_HOST")
+    smtp_port: int = int(_env("SMTP_PORT", "587"))
+    smtp_username: str = _env("SMTP_USERNAME")
+    smtp_password: str = _env("SMTP_PASSWORD")
+    # "starttls" (usually port 587), "ssl" (usually port 465) or "none".
+    smtp_security: str = _env("SMTP_SECURITY", "starttls").lower()
+    email_from: str = _env("EMAIL_FROM")
+
     # --- App info ---
     app_name: str = _env("APP_NAME", "Banjo Bonanza Jamboree")
 

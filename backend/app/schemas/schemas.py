@@ -35,6 +35,15 @@ class LoginRequest(msgspec.Struct):
     password: str
 
 
+class PasswordResetRequest(msgspec.Struct):
+    email: str
+
+
+class PasswordResetConfirm(msgspec.Struct):
+    token: str
+    new_password: str
+
+
 class TokenResponse(msgspec.Struct):
     access_token: str
     refresh_token: str

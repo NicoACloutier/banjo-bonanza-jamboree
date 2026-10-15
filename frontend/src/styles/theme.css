@@ -217,6 +217,17 @@ label select {
   font-weight: bold;
 }
 
+/* Good news, e.g. "Your password has been changed." */
+.success-banner {
+  background: #dfe6c3;
+  border: 2px solid #55652a;
+  color: #3d4a1c;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-weight: bold;
+}
+
 /* ---- Tab sheet rendering ---- */
 .tab-sheet {
   /* Shared by every row of a tab line (duration markers, chords, strings,

@@ -36,6 +36,14 @@ export const AuthApi = {
   google: (code: string) =>
     apiRequest<TokenResponse>("/api/auth/google", { method: "POST", body: { code }, auth: false }),
   me: () => apiRequest<CurrentUser>("/api/auth/me"),
+  requestPasswordReset: (email: string) =>
+    apiRequest<void>("/api/auth/password-reset/request", { method: "POST", body: { email }, auth: false }),
+  confirmPasswordReset: (token: string, newPassword: string) =>
+    apiRequest<void>("/api/auth/password-reset/confirm", {
+      method: "POST",
+      body: { token, new_password: newPassword },
+      auth: false,
+    }),
 };
 
 export const TabsApi = {

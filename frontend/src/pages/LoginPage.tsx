@@ -2,7 +2,7 @@
  * Login page: username/password form + Google sign-in.
  */
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { GoogleLoginButton } from "../components/GoogleLoginButton";
 import { useAuth } from "../hooks/useAuth";
 import { ApiRequestError } from "../lib/apiClient";
@@ -10,6 +10,8 @@ import { ApiRequestError } from "../lib/apiClient";
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  // Set by the reset password page after a successful reset.
+  const passwordWasReset = Boolean((useLocation().state as { passwordReset?: boolean } | null)?.passwordReset);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +34,11 @@ export function LoginPage() {
   return (
     <div className="panel" style={{ maxWidth: 420, margin: "0 auto" }}>
       <h1>Log in</h1>
+      {passwordWasReset && !error && (
+        <p className="success-banner" role="status">
+          Your password has been changed. Log in with your new password.
+        </p>
+      )}
       {error && <p className="error-banner">{error}</p>}
       <form onSubmit={handleSubmit}>
         <label>
@@ -51,6 +58,9 @@ export function LoginPage() {
           {submitting ? "Logging in..." : "Log in"}
         </button>
       </form>
+      <p>
+        <Link to="/forgot-password">Forgot your password?</Link>
+      </p>
       <hr />
       <GoogleLoginButton />
     </div>

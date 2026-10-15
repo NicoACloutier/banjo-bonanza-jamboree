@@ -7,6 +7,7 @@ The setup:
 | Frontend (static site) | Cloudflare Pages | Free |
 | Backend (FastAPI) | Fly.io, one always-on `shared-cpu-1x` machine with 512 MB | About $3-4/month |
 | Database (PostgreSQL) | Neon, free plan | Free (0.5 GB is plenty for tabs) |
+| Email (password reset links) | Any SMTP provider, e.g. Brevo's free plan | Free (300 emails a day) |
 | Domain name | Optional | About $10-20/year |
 
 Prices change; check each provider's pricing page. Fly.io needs a credit card
@@ -21,7 +22,7 @@ What's already in the repo for this:
 - `frontend/public/_headers`: Cloudflare Pages cache headers (the service worker
   is never cached; hashed bundles are cached for a year).
 - `.github/workflows/backend.yml`: runs the backend tests on every push, and
-  deploys to Fly.io from `main` once you add a `FLY_API_TOKEN` secret (step 6).
+  deploys to Fly.io from `main` once you add a `FLY_API_TOKEN` secret (step 7).
 
 
 ## 1. Create the database (Neon)
@@ -133,7 +134,27 @@ Username/password login works without this.
    redirect URI) on Pages and redeploy.
 
 
-## 6. Automatic deploys
+## 6. Email (password reset)
+
+"Forgot your password?" emails a reset link, so the backend needs an SMTP
+server to send from. Any provider works; Brevo (300 emails a day) and Resend
+(100 a day, needs a domain you own) both have free tiers. Get the SMTP
+details from your provider, then:
+```
+fly secrets set \
+  SMTP_HOST="smtp-relay.brevo.com" SMTP_PORT=587 SMTP_SECURITY=starttls \
+  SMTP_USERNAME="<smtp login>" SMTP_PASSWORD="<smtp key>" \
+  EMAIL_FROM="Banjo Bonanza Jamboree <noreply@your-domain.com>" \
+  FRONTEND_URL="https://<project>.pages.dev"
+```
+Use `SMTP_PORT=465 SMTP_SECURITY=ssl` if your provider only offers SSL.
+`FRONTEND_URL` is the site address the links point to; it defaults to the first
+`CORS_ORIGINS` entry. Without `SMTP_HOST` no email is sent (the server logs say
+so); locally, the email is printed in the backend's output instead, so you can
+copy the link from there.
+
+
+## 7. Automatic deploys
 
 - **Frontend**: Cloudflare Pages rebuilds on every push to `main`, and builds a
   preview for other branches.
@@ -146,7 +167,7 @@ Username/password login works without this.
   New repository secret, named `FLY_API_TOKEN`.
 
 
-## 7. Custom domain (optional)
+## 8. Custom domain (optional)
 
 - Frontend: Pages project -> Custom domains -> add e.g. `banjo.example.com`.
 - Backend: `fly certs add api.example.com`, then add the DNS records it prints

@@ -28,6 +28,8 @@ settings = get_settings()
 
 _password_hasher = PasswordHasher()
 
+MIN_PASSWORD_LENGTH = 8
+
 
 def hash_password(plain_password: str) -> str:
     """Hash a plaintext password using Argon2id."""

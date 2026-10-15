@@ -9,10 +9,12 @@ import { Navbar } from "./components/Navbar";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { ChordsPage } from "./pages/ChordsPage";
 import { FavoritesPage } from "./pages/FavoritesPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { GoogleCallbackPage } from "./pages/GoogleCallbackPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { TabEditorPage } from "./pages/TabEditorPage";
 import { TabViewPage } from "./pages/TabViewPage";
 import { TunerPage } from "./pages/TunerPage";
@@ -40,6 +42,8 @@ export default function App() {
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       </Routes>
     </div>
