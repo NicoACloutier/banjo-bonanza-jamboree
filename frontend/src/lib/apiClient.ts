@@ -10,7 +10,8 @@
  */
 import type { ApiError, TokenResponse } from "../types/api";
 
-const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+// `||` (not `??`) so a blank value, e.g. copied from .env.example, falls back too.
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const ACCESS_TOKEN_KEY = "banjo_tabs_access_token";
 const REFRESH_TOKEN_KEY = "banjo_tabs_refresh_token";

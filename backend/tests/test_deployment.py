@@ -7,11 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine
 
-from app.core.config import normalize_database_url
+from app.core.config import Settings, _env, check_production_settings, normalize_database_url
 from app.core.database import Base
 from app.models import orm  # noqa: F401  (registers the models on Base.metadata)
 
@@ -54,3 +55,21 @@ def test_migrations_build_exactly_the_models_schema(tmp_path):
     finally:
         engine.dispose()
     assert differences == []
+
+
+def test_blank_environment_values_fall_back_to_defaults(monkeypatch):
+    monkeypatch.setenv("BBJ_TEST_BLANK", "")
+    monkeypatch.setenv("BBJ_TEST_SPACES", "   ")
+    monkeypatch.setenv("BBJ_TEST_SET", " value ")
+    monkeypatch.delenv("BBJ_TEST_MISSING", raising=False)
+    assert _env("BBJ_TEST_BLANK", "default") == "default"
+    assert _env("BBJ_TEST_SPACES", "default") == "default"
+    assert _env("BBJ_TEST_MISSING", "default") == "default"
+    assert _env("BBJ_TEST_SET", "default") == "value"
+
+
+def test_production_requires_a_jwt_secret():
+    with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
+        check_production_settings(Settings(environment="production", jwt_secret_key=""))
+    check_production_settings(Settings(environment="production", jwt_secret_key="s3cret"))
+    check_production_settings(Settings(environment="development", jwt_secret_key=""))

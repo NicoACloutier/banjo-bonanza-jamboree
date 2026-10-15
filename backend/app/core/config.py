@@ -22,6 +22,13 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
+def _env(name: str, default: str = "") -> str:
+    """An environment variable, with blank values (e.g. `KEY=` copied from
+    `.env.example`) treated as unset so the default applies."""
+    value = os.getenv(name)
+    return default if value is None or not value.strip() else value.strip()
+
+
 def _split_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
@@ -51,34 +58,41 @@ class Settings:
     """Immutable, process-wide application settings."""
 
     # --- Core ---
-    environment: str = os.getenv("ENVIRONMENT", "development")
-    debug: bool = os.getenv("DEBUG", "false").lower() == "true"
+    environment: str = _env("ENVIRONMENT", "development")
+    debug: bool = _env("DEBUG", "false").lower() == "true"
 
     # --- Database ---
     # Example: postgresql+asyncpg://user:password@host:5432/banjo_tabs
-    database_url: str = normalize_database_url(os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./banjo_tabs.db"))
+    database_url: str = normalize_database_url(_env("DATABASE_URL", "sqlite+aiosqlite:///./banjo_tabs.db"))
 
     # --- Auth / JWT ---
-    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "")
-    jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
-    access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-    refresh_token_expire_days: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
+    jwt_secret_key: str = _env("JWT_SECRET_KEY")
+    jwt_algorithm: str = _env("JWT_ALGORITHM", "HS256")
+    access_token_expire_minutes: int = int(_env("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    refresh_token_expire_days: int = int(_env("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
 
     # --- Google OAuth2 ---
-    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
-    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "")
+    google_client_id: str = _env("GOOGLE_CLIENT_ID")
+    google_client_secret: str = _env("GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str = _env("GOOGLE_REDIRECT_URI")
 
     # --- CORS ---
     cors_origins: list[str] = field(
-        default_factory=lambda: _split_csv(os.getenv("CORS_ORIGINS", "http://localhost:5173"))
+        default_factory=lambda: _split_csv(_env("CORS_ORIGINS", "http://localhost:5173"))
     )
     # Optional regex for extra allowed origins, e.g. Cloudflare Pages preview
     # deploys: ^https://([a-z0-9-]+\.)?my-site\.pages\.dev$
-    cors_origin_regex: str | None = os.getenv("CORS_ORIGIN_REGEX") or None
+    cors_origin_regex: str | None = _env("CORS_ORIGIN_REGEX") or None
 
     # --- App info ---
-    app_name: str = os.getenv("APP_NAME", "Banjo Bonanza Jamboree")
+    app_name: str = _env("APP_NAME", "Banjo Bonanza Jamboree")
+
+
+def check_production_settings(settings: Settings) -> None:
+    """Refuse to run outside development/tests without a JWT secret, rather
+    than signing everyone's login tokens with an empty key."""
+    if settings.environment not in ("development", "test") and not settings.jwt_secret_key:
+        raise RuntimeError("JWT_SECRET_KEY must be set when ENVIRONMENT is not development or test.")
 
 
 @lru_cache

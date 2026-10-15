@@ -8,10 +8,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, library, tabs, users
-from app.core.config import get_settings
+from app.core.config import check_production_settings, get_settings
 from app.core.database import Base, engine
 
 settings = get_settings()
+check_production_settings(settings)
 
 
 @asynccontextmanager
