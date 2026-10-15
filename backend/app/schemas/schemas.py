@@ -44,6 +44,10 @@ class PasswordResetConfirm(msgspec.Struct):
     new_password: str
 
 
+class VerifyEmailRequest(msgspec.Struct):
+    token: str
+
+
 class TokenResponse(msgspec.Struct):
     access_token: str
     refresh_token: str
@@ -73,6 +77,8 @@ class CurrentUser(msgspec.Struct):
     username: str
     created_at: datetime
     is_admin: bool
+    email: str | None
+    email_verified: bool
 
 
 # ---------------------------------------------------------------------------

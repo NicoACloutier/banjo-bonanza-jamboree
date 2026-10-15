@@ -16,6 +16,9 @@ export interface UserPublic {
 /** The logged-in user (from /api/auth/me). Admins can delete anyone's tab. */
 export interface CurrentUser extends UserPublic {
   is_admin: boolean;
+  email: string | null;
+  /** Until this is true they can browse and keep favorites, but not post. */
+  email_verified: boolean;
 }
 
 export interface TokenResponse {

@@ -46,6 +46,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # Admins can delete anyone's tab. Granted with `python -m app.cli make-admin`.
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Whether they've opened the link emailed when they registered. Until
+    # then they can browse and keep favorites, but not post (see
+    # deps.get_verified_user).
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     tabs: Mapped[list["Tab"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     votes: Mapped[list["Vote"]] = relationship(back_populates="user", cascade="all, delete-orphan")

@@ -2,10 +2,13 @@
 FastAPI dependencies for authentication.
 
 `get_current_user` requires a valid access token.
+`get_verified_user` also requires a verified email address (for posting:
+creating and editing tabs, voting, forking).
 `get_optional_user` allows anonymous access (returns None if there's no
-token, but rejects an invalid or expired one so the client refreshes it) -- used by endpoints that support both logged-in and anonymous
-users (browsing, playback): anyone can view and play tabs, but creating,
-editing, voting and the library features require an account.
+token, but rejects an invalid or expired one so the client refreshes it).
+It's used by endpoints that support both logged-in and anonymous users
+(browsing, playback): anyone can view and play tabs, but creating, editing,
+voting and the library features require an account.
 """
 
 from __future__ import annotations
@@ -76,4 +79,14 @@ async def get_current_user(
     user = await _load_user(db, user_id)
     if user is None:
         raise credentials_error
+    return user
+
+
+EMAIL_NOT_VERIFIED = "Verify your email address first: open the link we emailed you when you registered."
+
+
+async def get_verified_user(user: User = Depends(get_current_user)) -> User:
+    """The logged-in user, if they've verified their email address."""
+    if not user.email_verified:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=EMAIL_NOT_VERIFIED)
     return user

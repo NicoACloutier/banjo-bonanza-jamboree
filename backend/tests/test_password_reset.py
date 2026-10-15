@@ -18,8 +18,14 @@ _NEW_PASSWORD = "N3wBanj0Passw0rd"
 
 @pytest.fixture
 def outbox(monkeypatch):
+    """Password reset emails sent (registering also sends a verification email, left out here)."""
     sent = []
-    monkeypatch.setattr(email_service, "send_email", lambda to, subject, body: sent.append((to, subject, body)))
+
+    def send(to, subject, body):
+        if subject.startswith("Reset your"):
+            sent.append((to, subject, body))
+
+    monkeypatch.setattr(email_service, "send_email", send)
     return sent
 
 

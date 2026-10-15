@@ -16,6 +16,8 @@ interface AuthContextValue {
   register: (username: string, email: string, password: string) => Promise<void>;
   loginWithGoogle: (code: string) => Promise<void>;
   logout: () => void;
+  /** Reload the user from the server (e.g. after verifying their email). */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -77,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, logout, refreshUser: refreshCurrentUser }}>
       {children}
     </AuthContext.Provider>
   );

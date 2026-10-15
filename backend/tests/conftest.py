@@ -15,8 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.api import auth as auth_api
-from app.api import password_reset
+from app.api import email_verification, password_reset
 from app.core.database import Base, get_db
+from app.core.deps import get_current_user, get_verified_user
 from app.main import app
 
 _engine = create_async_engine(
@@ -41,6 +42,19 @@ def _reset_rate_limits():
     auth_api.login_failures_per_account.reset()
     password_reset.reset_requests_per_ip.reset()
     password_reset.reset_requests_per_email.reset()
+    email_verification.resends_per_account.reset()
+
+
+@pytest.fixture(autouse=True)
+def _skip_email_verification(request):
+    """Most tests post as freshly registered (so unverified) users; let them,
+    except in tests marked `email_verification`, which check the real rule."""
+    if request.node.get_closest_marker("email_verification"):
+        yield
+        return
+    app.dependency_overrides[get_verified_user] = get_current_user
+    yield
+    app.dependency_overrides.pop(get_verified_user, None)
 
 
 @pytest_asyncio.fixture(autouse=True)

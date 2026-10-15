@@ -6,6 +6,7 @@
  */
 import { Route, Routes } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
+import { VerifyEmailBanner } from "./components/VerifyEmailBanner";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { ChordsPage } from "./pages/ChordsPage";
 import { FavoritesPage } from "./pages/FavoritesPage";
@@ -19,12 +20,14 @@ import { TabEditorPage } from "./pages/TabEditorPage";
 import { TabViewPage } from "./pages/TabViewPage";
 import { TunerPage } from "./pages/TunerPage";
 import { UserProfilePage } from "./pages/UserProfilePage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 
 export default function App() {
   const online = useOnlineStatus();
   return (
     <div className="app-shell">
       <Navbar />
+      <VerifyEmailBanner />
       {!online && (
         <p className="offline-banner" role="status">
           You're offline. Tabs you've opened before still work; saving and searching
@@ -44,6 +47,7 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       </Routes>
     </div>

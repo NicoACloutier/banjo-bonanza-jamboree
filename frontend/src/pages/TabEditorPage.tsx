@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { TabEditor, type TabMetadata, createEmptyNote } from "../components/TabEditor";
+import { ResendVerificationButton } from "../components/VerifyEmailBanner";
 import { useAuth } from "../hooks/useAuth";
 import { TabsApi } from "../lib/api";
 import { ApiRequestError } from "../lib/apiClient";
@@ -141,6 +142,18 @@ export function TabEditorPage() {
         <p>
           You need an account to create and edit tabs. <Link to="/login">Log in</Link> or{" "}
           <Link to="/register">register</Link>.
+        </p>
+      </div>
+    );
+  }
+
+  if (!user.email_verified) {
+    return (
+      <div className="panel">
+        <h1>{isEditing ? "Edit Tab" : "Create a New Tab"}</h1>
+        <p>
+          Verify your email to create and edit tabs: open the link we sent to <strong>{user.email}</strong>.{" "}
+          <ResendVerificationButton />
         </p>
       </div>
     );

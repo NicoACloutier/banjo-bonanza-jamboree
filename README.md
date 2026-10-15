@@ -28,7 +28,8 @@ tablature, with an added tuner.
   code flow), with short-lived JWT access tokens and rotating refresh tokens.
   Login is rate-limited: 10 attempts a minute per address, and 10 failed
   attempts per account every 15 minutes. Forgotten passwords are reset with
-  an emailed link (valid for an hour, single use).
+  an emailed link (valid for an hour, single use). New accounts verify their
+  email with an emailed link before they can post tabs or vote.
 
 ## Tech stack
 

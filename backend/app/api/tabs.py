@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, get_optional_user
+from app.core.deps import get_current_user, get_optional_user, get_verified_user
 from app.core.msgspec_utils import MsgspecResponse, parse_json_body
 from app.core.tunings import TUNINGS, get_tuning
 from app.models.orm import (
@@ -387,7 +387,7 @@ async def _save_revision_snapshot(db: AsyncSession, tab: Tab) -> None:
 async def create_tab(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_verified_user),
 ) -> MsgspecResponse:
     """Create a tab (as a draft, or published straight away) owned by the caller."""
     body = await parse_json_body(request, TabCreateRequest)
@@ -489,7 +489,7 @@ async def update_tab(
     tab_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_verified_user),
 ) -> MsgspecResponse:
     body = await parse_json_body(request, TabUpdateRequest)
     _validate_tab_request(body)
@@ -561,7 +561,7 @@ async def restore_tab_revision(
     tab_id: str,
     revision_id: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_verified_user),
 ) -> MsgspecResponse:
     """
     Restore a tab to a past revision's content. The tab's *current* state is
@@ -612,7 +612,7 @@ async def delete_tab(
 
 @router.post("/{tab_id}/vote")
 async def vote_tab(
-    tab_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+    tab_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_verified_user)
 ) -> MsgspecResponse:
     """Toggle the current user's thumbs-up vote on a published tab."""
     result = await db.execute(select(Tab).where(Tab.id == tab_id))
@@ -673,7 +673,7 @@ async def favorite_tab(
 
 @router.post("/{tab_id}/fork")
 async def fork_tab(
-    tab_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+    tab_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_verified_user)
 ) -> MsgspecResponse:
     """Copy a tab (published, or the caller's own) into a new draft owned by the caller."""
     source = await _load_tab(db, tab_id)

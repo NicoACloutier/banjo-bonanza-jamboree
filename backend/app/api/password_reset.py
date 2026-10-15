@@ -8,8 +8,7 @@ its timing reveals who has an account.
 
 from __future__ import annotations
 
-import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import Response
@@ -20,23 +19,19 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.msgspec_utils import parse_json_body
 from app.core.rate_limit import SlidingWindowLimiter, client_ip, too_many_requests
-from app.core.security import MIN_PASSWORD_LENGTH, hash_password, hash_refresh_token
-from app.models.orm import EmailToken, RefreshToken, User
+from app.core.security import MIN_PASSWORD_LENGTH, hash_password
+from app.models.orm import RefreshToken, User
 from app.schemas.schemas import PasswordResetConfirm, PasswordResetRequest
 from app.services import email as email_service
+from app.services.email_tokens import PASSWORD_RESET, issue_token, use_token
 
 router = APIRouter(prefix="/api/auth/password-reset", tags=["auth"])
 
-PURPOSE = "password_reset"
 TOKEN_LIFETIME = timedelta(hours=1)
 
 # Each request may send an email, so limit them per address and per mailbox.
 reset_requests_per_ip = SlidingWindowLimiter(limit=5, window_seconds=15 * 60)
 reset_requests_per_email = SlidingWindowLimiter(limit=3, window_seconds=60 * 60)
-
-
-def _hash(raw_token: str) -> str:
-    return hash_refresh_token(raw_token)  # the same SHA-256 hashing as refresh tokens
 
 
 def _reset_email(username: str, link: str) -> str:
@@ -66,15 +61,7 @@ async def request_password_reset(
 
     user = (await db.execute(select(User).where(func.lower(User.email) == address))).scalar_one_or_none()
     if user is not None and user.email:
-        raw = secrets.token_urlsafe(32)
-        db.add(
-            EmailToken(
-                user_id=user.id,
-                purpose=PURPOSE,
-                token_hash=_hash(raw),
-                expires_at=datetime.now(timezone.utc) + TOKEN_LIFETIME,
-            )
-        )
+        raw = await issue_token(db, user, PASSWORD_RESET, TOKEN_LIFETIME)
         await db.commit()
         settings = get_settings()
         link = f"{settings.frontend_url}/reset-password?token={raw}"
@@ -93,27 +80,18 @@ async def confirm_password_reset(request: Request, db: AsyncSession = Depends(ge
             detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
         )
 
-    now = datetime.now(timezone.utc)
-    token = (
-        await db.execute(
-            select(EmailToken).where(EmailToken.token_hash == _hash(body.token), EmailToken.purpose == PURPOSE)
-        )
-    ).scalar_one_or_none()
-    if token is None or token.used_at is not None or token.expires_at.replace(tzinfo=timezone.utc) < now:
+    # Using the link also uses up any other outstanding reset links.
+    user = await use_token(db, body.token, PASSWORD_RESET)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This reset link is invalid or has expired. Ask for a new one.",
         )
 
-    user = (await db.execute(select(User).where(User.id == token.user_id))).scalar_one()
     user.hashed_password = hash_password(body.new_password)
-    # Use up this link and any other outstanding ones, and sign out every
-    # device, in case the old password was compromised.
-    await db.execute(
-        update(EmailToken)
-        .where(EmailToken.user_id == user.id, EmailToken.purpose == PURPOSE, EmailToken.used_at.is_(None))
-        .values(used_at=now)
-    )
+    # The link arrived at their address, so it's verified too.
+    user.email_verified = True
+    # Sign out every device, in case the old password was compromised.
     await db.execute(update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True))
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,7 @@ from app.schemas.schemas import (
     RegisterRequest,
     TokenResponse,
 )
+from app.api.email_verification import send_verification_email
 from app.services.converters import user_to_current
 from app.services.google_oauth import exchange_code_for_userinfo
 
@@ -55,7 +56,9 @@ async def _issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
 
 
 @router.post("/register")
-async def register(request: Request, db: AsyncSession = Depends(get_db)) -> MsgspecResponse:
+async def register(
+    request: Request, background: BackgroundTasks, db: AsyncSession = Depends(get_db)
+) -> MsgspecResponse:
     body = await parse_json_body(request, RegisterRequest)
 
     if not _USERNAME_RE.match(body.username):
@@ -82,6 +85,9 @@ async def register(request: Request, db: AsyncSession = Depends(get_db)) -> Msgs
     user = User(username=body.username, email=body.email, hashed_password=hash_password(body.password))
     db.add(user)
     await db.flush()
+    # They're logged in straight away, but can't post until they open the
+    # link this emails them.
+    await send_verification_email(db, user, background)
     tokens = await _issue_tokens(db, user)
     return MsgspecResponse(tokens, status_code=status.HTTP_201_CREATED)
 
@@ -165,7 +171,13 @@ async def google_login(request: Request, db: AsyncSession = Depends(get_db)) -> 
         ).scalar_one_or_none() is not None:
             suffix += 1
             candidate = f"{base_username}{suffix}"
-        user = User(username=candidate, email=userinfo.email, google_subject_id=userinfo.sub)
+        # Google has already checked the address when it says so.
+        user = User(
+            username=candidate,
+            email=userinfo.email,
+            google_subject_id=userinfo.sub,
+            email_verified=userinfo.email_verified,
+        )
         db.add(user)
         await db.flush()
 

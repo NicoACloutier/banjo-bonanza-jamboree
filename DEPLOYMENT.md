@@ -7,7 +7,7 @@ The setup:
 | Frontend (static site) | Cloudflare Pages | Free |
 | Backend (FastAPI) | Fly.io, one always-on `shared-cpu-1x` machine with 512 MB | About $3-4/month |
 | Database (PostgreSQL) | Neon, free plan | Free (0.5 GB is plenty for tabs) |
-| Email (password reset links) | Any SMTP provider, e.g. Brevo's free plan | Free (300 emails a day) |
+| Email (verification and password reset links) | Any SMTP provider, e.g. Brevo's free plan | Free (300 emails a day) |
 | Domain name | Optional | About $10-20/year |
 
 Prices change; check each provider's pricing page. Fly.io needs a credit card
@@ -134,10 +134,15 @@ Username/password login works without this.
    redirect URI) on Pages and redeploy.
 
 
-## 6. Email (password reset)
+## 6. Email (verification and password reset)
 
-"Forgot your password?" emails a reset link, so the backend needs an SMTP
-server to send from. Any provider works; Brevo (300 emails a day) and Resend
+New accounts get an email with a link to verify their address, and "Forgot
+your password?" emails a reset link, so the backend needs an SMTP server to
+send from. **Set this up before people register:** until they open the link,
+new accounts can browse and save favorites but can't post tabs or vote, and
+without email the link never arrives. (Accounts that existed before email
+verification was added count as verified, as do Google sign-ins Google has
+verified.) Any provider works; Brevo (300 emails a day) and Resend
 (100 a day, needs a domain you own) both have free tiers. Get the SMTP
 details from your provider, then:
 ```
@@ -152,6 +157,11 @@ Use `SMTP_PORT=465 SMTP_SECURITY=ssl` if your provider only offers SSL.
 `CORS_ORIGINS` entry. Without `SMTP_HOST` no email is sent (the server logs say
 so); locally, the email is printed in the backend's output instead, so you can
 copy the link from there.
+
+If someone's email never arrives, you can verify them by hand, in `backend/`:
+```
+fly ssh console -C "python -m app.cli verify-email <username>"
+```
 
 
 ## 7. Automatic deploys

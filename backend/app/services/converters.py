@@ -27,7 +27,14 @@ def user_to_public(user: User) -> UserPublic:
 
 
 def user_to_current(user: User) -> CurrentUser:
-    return CurrentUser(id=user.id, username=user.username, created_at=user.created_at, is_admin=user.is_admin)
+    return CurrentUser(
+        id=user.id,
+        username=user.username,
+        created_at=user.created_at,
+        is_admin=user.is_admin,
+        email=user.email,
+        email_verified=user.email_verified,
+    )
 
 
 def note_fret_to_out(fret: NoteFret) -> NoteFretOut:

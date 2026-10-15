@@ -71,3 +71,11 @@ async def test_public_profiles_dont_reveal_admins(client):
     await _login(client, "moderator")
     await cli.set_admin("moderator", True)
     assert "is_admin" not in (await client.get("/api/users/moderator")).json()
+
+
+async def test_verify_email_command(client):
+    headers = await _login(client, "stuck")
+    assert (await client.get("/api/auth/me", headers=headers)).json()["email_verified"] is False
+    assert await cli.verify_email("stuck")
+    assert (await client.get("/api/auth/me", headers=headers)).json()["email_verified"] is True
+    assert not await cli.verify_email("nobody")

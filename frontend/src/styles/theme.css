@@ -217,6 +217,22 @@ label select {
   font-weight: bold;
 }
 
+/* An inline error next to the control it's about (e.g. a failed vote). */
+.error-text {
+  color: var(--ember-dark);
+  font-weight: bold;
+}
+
+/* Something to act on that isn't an error, e.g. "Check your email". */
+.info-banner {
+  background: var(--parchment-dark);
+  border: 2px solid var(--gold);
+  color: var(--ink);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
 /* Good news, e.g. "Your password has been changed." */
 .success-banner {
   background: #dfe6c3;

@@ -62,6 +62,7 @@ export function TabViewPage() {
 
   // Deleting the tab (owner only), confirmed inline first.
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const engineRef = useRef<TabPlaybackEngine | null>(null);
@@ -171,11 +172,12 @@ export function TabViewPage() {
 
   const handleVote = async () => {
     if (!tab) return;
+    setVoteError(null);
     try {
       const result = await TabsApi.vote(tab.id);
       setTab({ ...tab, vote_count: result.vote_count, has_voted: result.has_voted });
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Failed to vote.");
+      setVoteError(err instanceof ApiRequestError ? err.message : "Failed to vote.");
     }
   };
 
@@ -264,6 +266,7 @@ export function TabViewPage() {
         </p>
         <div className="tab-meta-actions">
           <VoteButton voteCount={tab.vote_count} hasVoted={tab.has_voted} onVote={handleVote} />
+          {voteError && <span className="error-text">{voteError}</span>}
           {isOwner && <button onClick={() => navigate(`/tabs/${tab.id}/edit`)}>Edit</button>}
           {isOwner && (
             <button className="secondary" onClick={loadRevisions}>

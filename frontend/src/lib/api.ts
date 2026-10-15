@@ -38,6 +38,9 @@ export const AuthApi = {
   me: () => apiRequest<CurrentUser>("/api/auth/me"),
   requestPasswordReset: (email: string) =>
     apiRequest<void>("/api/auth/password-reset/request", { method: "POST", body: { email }, auth: false }),
+  verifyEmail: (token: string) =>
+    apiRequest<void>("/api/auth/verify-email", { method: "POST", body: { token }, auth: false }),
+  resendVerification: () => apiRequest<void>("/api/auth/verify-email/resend", { method: "POST" }),
   confirmPasswordReset: (token: string, newPassword: string) =>
     apiRequest<void>("/api/auth/password-reset/confirm", {
       method: "POST",
