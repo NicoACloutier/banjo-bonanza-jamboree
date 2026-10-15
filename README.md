@@ -25,6 +25,8 @@ tablature, with an added tuner.
   sharp/flat meter.
 - **Auth**: username/password (Argon2id-hashed) and Google OAuth2 (authorization
   code flow), with short-lived JWT access tokens and rotating refresh tokens.
+  Login is rate-limited: 10 attempts a minute per address, and 10 failed
+  attempts per account every 15 minutes.
 
 ## Tech stack
 

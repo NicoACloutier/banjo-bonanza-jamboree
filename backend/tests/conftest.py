@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.api import auth as auth_api
 from app.core.database import Base, get_db
 from app.main import app
 
@@ -31,6 +32,12 @@ async def _override_get_db():
 
 
 app.dependency_overrides[get_db] = _override_get_db
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    auth_api.login_attempts_per_ip.reset()
+    auth_api.login_failures_per_account.reset()
 
 
 @pytest_asyncio.fixture(autouse=True)

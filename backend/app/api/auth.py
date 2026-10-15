@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.deps import ANONYMOUS_USERNAME, get_current_user
 from app.core.msgspec_utils import MsgspecResponse, parse_json_body
+from app.core.rate_limit import SlidingWindowLimiter, client_ip, too_many_requests
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -84,17 +85,35 @@ async def register(request: Request, db: AsyncSession = Depends(get_db)) -> Msgs
     return MsgspecResponse(tokens, status_code=status.HTTP_201_CREATED)
 
 
+# Login rate limits. Every attempt from an address counts (each one costs an
+# Argon2 hash), and failed attempts count against the account being tried, so
+# a password can't be guessed by spreading attempts over many addresses.
+# A successful login clears the account's failures.
+login_attempts_per_ip = SlidingWindowLimiter(limit=10, window_seconds=60)
+login_failures_per_account = SlidingWindowLimiter(limit=10, window_seconds=15 * 60)
+
+
 @router.post("/login")
 async def login(request: Request, db: AsyncSession = Depends(get_db)) -> MsgspecResponse:
     body = await parse_json_body(request, LoginRequest)
+    ip = client_ip(request)
+    account = body.username.strip().lower()
+    for limiter, key in [(login_attempts_per_ip, ip), (login_failures_per_account, account)]:
+        wait = limiter.retry_after(key)
+        if wait is not None:
+            raise too_many_requests(wait, "login attempts")
+    login_attempts_per_ip.record(ip)
+
     result = await db.execute(select(User).where(User.username == body.username))
     user = result.scalar_one_or_none()
     if user is None or not user.hashed_password or not verify_password(
         body.password, user.hashed_password
     ):
+        login_failures_per_account.record(account)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password."
         )
+    login_failures_per_account.clear(account)
     tokens = await _issue_tokens(db, user)
     return MsgspecResponse(tokens)
 
