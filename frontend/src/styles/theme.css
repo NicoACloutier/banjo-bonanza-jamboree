@@ -546,29 +546,6 @@ label select {
   font-style: italic;
 }
 
-/* ---- Print / PDF export ----
-   Hides interactive chrome (nav, toolbars, forms) and prints just the tab
-   sheet itself, in plain black-on-white for legibility on paper. */
-@media print {
-  body {
-    background: none;
-  }
-  .no-print,
-  nav,
-  .app-nav {
-    display: none !important;
-  }
-  .tab-sheet {
-    color: #000;
-    overflow-x: visible;
-  }
-  .panel {
-    box-shadow: none;
-    background: #fff;
-    color: #000;
-  }
-}
-
 /* Narrow windows: there isn't room for the tab and the note editor side by
    side, so the editor panel goes below the tab instead. */
 @media (max-width: 900px) {

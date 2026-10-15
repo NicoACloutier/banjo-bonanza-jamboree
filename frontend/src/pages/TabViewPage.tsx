@@ -262,7 +262,7 @@ export function TabViewPage() {
           ))}
           {tab.status === "draft" && <span className="tag">DRAFT</span>}
         </p>
-        <div className="tab-meta-actions no-print">
+        <div className="tab-meta-actions">
           <VoteButton voteCount={tab.vote_count} hasVoted={tab.has_voted} onVote={handleVote} />
           {isOwner && <button onClick={() => navigate(`/tabs/${tab.id}/edit`)}>Edit</button>}
           {isOwner && (
@@ -278,7 +278,7 @@ export function TabViewPage() {
         </div>
       </div>
       {confirmingDelete && (
-        <div className="toolbar no-print" role="alert">
+        <div className="toolbar" role="alert">
           <span>
             {isOwner
               ? "Delete this tab? This can't be undone."
@@ -313,7 +313,7 @@ export function TabViewPage() {
       )}
 
       {showRevisions && (
-        <div className="panel no-print">
+        <div className="panel">
           <h3>Revision history</h3>
           {revisions.length === 0 && <p className="muted-text">No prior revisions saved yet.</p>}
           <ul>
@@ -346,7 +346,7 @@ export function TabViewPage() {
         onScrollSpeedChange={setScrollSpeed}
       />
 
-      <div className="toolbar no-print">
+      <div className="toolbar">
         <label>
           <input type="checkbox" checked={metronomeOn} onChange={toggleMetronome} />
           Metronome{tab.time_signature && ` (${tab.time_signature})`}

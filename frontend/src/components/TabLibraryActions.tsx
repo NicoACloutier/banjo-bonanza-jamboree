@@ -33,7 +33,7 @@ export function TabLibraryActions({ tab, onFavoriteChange }: TabLibraryActionsPr
   };
 
   return (
-    <div className="toolbar no-print library-actions">
+    <div className="toolbar library-actions">
       <button
         type="button"
         className={tab.is_favorited ? "" : "secondary"}
