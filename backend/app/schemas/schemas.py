@@ -309,38 +309,10 @@ class TabRevisionDetail(msgspec.Struct):
 
 
 # ---------------------------------------------------------------------------
-# Favorites / setlists
+# Favorites
 # ---------------------------------------------------------------------------
 
 
 class FavoriteResponse(msgspec.Struct):
     tab_id: str
     is_favorited: bool
-
-
-class SetlistCreateRequest(msgspec.Struct):
-    name: str
-
-
-class SetlistUpdateRequest(msgspec.Struct):
-    name: str
-    # The setlist's full, ordered contents (replaces the existing items).
-    tab_ids: list[str] = msgspec.field(default_factory=list)
-
-
-class SetlistAddTabRequest(msgspec.Struct):
-    tab_id: str
-
-
-class SetlistSummary(msgspec.Struct):
-    id: str
-    name: str
-    tab_count: int
-    updated_at: datetime
-
-
-class SetlistDetail(msgspec.Struct):
-    id: str
-    name: str
-    updated_at: datetime
-    tabs: list[TabSummary]

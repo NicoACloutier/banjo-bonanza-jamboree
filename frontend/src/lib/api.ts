@@ -5,8 +5,6 @@
 import { apiRequest } from "./apiClient";
 import type {
   FavoriteResponse,
-  SetlistDetail,
-  SetlistSummary,
   TabCreateRequest,
   TabDetail,
   TabListResponse,
@@ -60,14 +58,6 @@ export const TabsApi = {
 
 export const LibraryApi = {
   favorites: () => apiRequest<TabListResponse>("/api/me/favorites"),
-  setlists: () => apiRequest<SetlistSummary[]>("/api/setlists"),
-  setlist: (id: string) => apiRequest<SetlistDetail>(`/api/setlists/${id}`),
-  createSetlist: (name: string) => apiRequest<SetlistDetail>("/api/setlists", { method: "POST", body: { name } }),
-  updateSetlist: (id: string, name: string, tabIds: string[]) =>
-    apiRequest<SetlistDetail>(`/api/setlists/${id}`, { method: "PUT", body: { name, tab_ids: tabIds } }),
-  addToSetlist: (id: string, tabId: string) =>
-    apiRequest<SetlistDetail>(`/api/setlists/${id}/tabs`, { method: "POST", body: { tab_id: tabId } }),
-  deleteSetlist: (id: string) => apiRequest<void>(`/api/setlists/${id}`, { method: "DELETE" }),
 };
 
 export const UsersApi = {

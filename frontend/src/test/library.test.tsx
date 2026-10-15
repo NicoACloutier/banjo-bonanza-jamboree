@@ -1,29 +1,18 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TabLibraryActions } from "../components/TabLibraryActions";
 import { HomePage } from "../pages/HomePage";
-import { SetlistPage } from "../pages/SetlistPage";
-import type { SetlistDetail, TabDetail, TabSummary } from "../types/api";
+import type { TabDetail, TabSummary } from "../types/api";
 
 const api = vi.hoisted(() => ({
   search: vi.fn(),
   favorite: vi.fn(),
   fork: vi.fn(),
-  setlists: vi.fn(),
-  setlist: vi.fn(),
-  addToSetlist: vi.fn(),
-  updateSetlist: vi.fn(),
 }));
 vi.mock("../lib/api", () => ({
   TabsApi: { search: api.search, favorite: api.favorite, fork: api.fork },
-  LibraryApi: {
-    setlists: api.setlists,
-    setlist: api.setlist,
-    addToSetlist: api.addToSetlist,
-    updateSetlist: api.updateSetlist,
-  },
 }));
 
 beforeEach(() => Object.values(api).forEach((fn) => fn.mockReset()));
@@ -83,7 +72,6 @@ describe("TabLibraryActions", () => {
   const tab = { id: "t1", is_favorited: false } as TabDetail;
 
   it("toggles the favorite", async () => {
-    api.setlists.mockResolvedValue([]);
     api.favorite.mockResolvedValue({ tab_id: "t1", is_favorited: true });
     const onFavoriteChange = vi.fn();
     render(
@@ -97,7 +85,6 @@ describe("TabLibraryActions", () => {
   });
 
   it("forks into a draft and opens it in the editor", async () => {
-    api.setlists.mockResolvedValue([]);
     api.fork.mockResolvedValue({ id: "fork1" });
     render(
       <MemoryRouter>
@@ -107,72 +94,5 @@ describe("TabLibraryActions", () => {
     );
     await userEvent.setup().click(screen.getByRole("button", { name: /fork/i }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/tabs/fork1/edit"));
-  });
-
-  it("adds the tab to a chosen setlist", async () => {
-    api.setlists.mockResolvedValue([
-      { id: "s1", name: "Friday", tab_count: 0, updated_at: "" },
-      { id: "s2", name: "Gig", tab_count: 3, updated_at: "" },
-    ]);
-    api.addToSetlist.mockResolvedValue({ id: "s2", name: "Gig", updated_at: "", tabs: [] });
-    const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <TabLibraryActions tab={tab} onFavoriteChange={vi.fn()} />
-      </MemoryRouter>,
-    );
-    await user.selectOptions(await screen.findByLabelText("Setlist"), "s2");
-    await user.click(screen.getByRole("button", { name: /add to setlist/i }));
-    expect(api.addToSetlist).toHaveBeenCalledWith("s2", "t1");
-    expect(await screen.findByText('Added to "Gig".')).toBeInTheDocument();
-  });
-
-  it("links to making a setlist when there are none", async () => {
-    api.setlists.mockResolvedValue([]);
-    render(
-      <MemoryRouter>
-        <TabLibraryActions tab={tab} onFavoriteChange={vi.fn()} />
-      </MemoryRouter>,
-    );
-    expect(await screen.findByRole("link", { name: /make a setlist/i })).toHaveAttribute("href", "/setlists");
-  });
-});
-
-describe("SetlistPage", () => {
-  const setlist: SetlistDetail = { id: "s1", name: "Jam", updated_at: "", tabs: [summary("a"), summary("b"), summary("c")] };
-
-  const renderPage = () =>
-    render(
-      <MemoryRouter initialEntries={["/setlists/s1"]}>
-        <Routes>
-          <Route path="/setlists/:setlistId" element={<SetlistPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-  it("reorders and removes tabs", async () => {
-    api.setlist.mockResolvedValue(setlist);
-    api.updateSetlist.mockImplementation(async (_id: string, name: string, tabIds: string[]) => ({
-      ...setlist,
-      name,
-      tabs: tabIds.map((id) => summary(id)),
-    }));
-    const user = userEvent.setup();
-    renderPage();
-
-    const moveDown = await screen.findAllByRole("button", { name: "Move down" });
-    await user.click(moveDown[0]);
-    expect(api.updateSetlist).toHaveBeenLastCalledWith("s1", "Jam", ["b", "a", "c"]);
-
-    await user.click(screen.getAllByRole("button", { name: "Remove from setlist" })[2]);
-    expect(api.updateSetlist).toHaveBeenLastCalledWith("s1", "Jam", ["b", "a"]);
-    expect(screen.getAllByRole("link", { name: /^Song / }).map((a) => a.textContent)).toEqual(["Song b", "Song a"]);
-  });
-
-  it("can't move the first tab up or the last tab down", async () => {
-    api.setlist.mockResolvedValue(setlist);
-    renderPage();
-    expect((await screen.findAllByRole("button", { name: "Move up" }))[0]).toBeDisabled();
-    expect(screen.getAllByRole("button", { name: "Move down" })[2]).toBeDisabled();
   });
 });

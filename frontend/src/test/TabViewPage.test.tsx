@@ -36,8 +36,6 @@ const tab: TabDetail = {
 const api = vi.hoisted(() => ({ remove: vi.fn(async () => undefined) }));
 vi.mock("../lib/api", () => ({
   TabsApi: { get: vi.fn(async () => tab), remove: api.remove },
-  // Logged-in users also get the favorite/fork/setlist actions.
-  LibraryApi: { setlists: vi.fn(async () => []) },
 }));
 const auth = vi.hoisted(() => ({ current: { user: null as { id: string; username: string } | null } }));
 vi.mock("../hooks/useAuth", () => ({ useAuth: () => auth.current }));

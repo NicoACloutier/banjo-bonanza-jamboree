@@ -1,4 +1,4 @@
-"""Tests for library features: style/key/difficulty tags and filters, favorites, forks, and setlists."""
+"""Tests for library features: style/key/difficulty tags and filters, favorites and forks."""
 
 from __future__ import annotations
 
@@ -154,64 +154,3 @@ async def test_fork_link_survives_source_deletion(client):
     fetched = await client.get(f"/api/tabs/{fork['id']}", headers=forker)
     assert fetched.status_code == 200
     assert fetched.json()["forked_from"] is None
-
-
-# ---------------------------------------------------------------------------
-# Setlists
-# ---------------------------------------------------------------------------
-
-
-async def test_setlist_create_add_reorder_rename_delete(client, author_headers):
-    headers = await _login(client, "jammer")
-    a = (await client.post("/api/tabs", json=_tab("A"), headers=author_headers)).json()
-    b = (await client.post("/api/tabs", json=_tab("B"), headers=author_headers)).json()
-
-    created = await client.post("/api/setlists", json={"name": "  Friday jam  "}, headers=headers)
-    assert created.status_code == 201
-    setlist = created.json()
-    assert (setlist["name"], setlist["tabs"]) == ("Friday jam", [])
-
-    await client.post(f"/api/setlists/{setlist['id']}/tabs", json={"tab_id": a["id"]}, headers=headers)
-    added = (await client.post(f"/api/setlists/{setlist['id']}/tabs", json={"tab_id": b["id"]}, headers=headers)).json()
-    assert [t["song_name"] for t in added["tabs"]] == ["A", "B"]
-
-    updated = (
-        await client.put(
-            f"/api/setlists/{setlist['id']}", json={"name": "Sat jam", "tab_ids": [b["id"], a["id"]]}, headers=headers
-        )
-    ).json()
-    assert (updated["name"], [t["song_name"] for t in updated["tabs"]]) == ("Sat jam", ["B", "A"])
-
-    summaries = (await client.get("/api/setlists", headers=headers)).json()
-    assert [(s["name"], s["tab_count"]) for s in summaries] == [("Sat jam", 2)]
-
-    assert (await client.delete(f"/api/setlists/{setlist['id']}", headers=headers)).status_code == 204
-    assert (await client.get("/api/setlists", headers=headers)).json() == []
-
-
-async def test_setlists_are_private(client):
-    alice = await _login(client, "alice2")
-    bob = await _login(client, "bob2")
-    setlist = (await client.post("/api/setlists", json={"name": "Mine"}, headers=alice)).json()
-    for method, path, body in [
-        ("GET", f"/api/setlists/{setlist['id']}", None),
-        ("PUT", f"/api/setlists/{setlist['id']}", {"name": "Hijacked", "tab_ids": []}),
-        ("DELETE", f"/api/setlists/{setlist['id']}", None),
-    ]:
-        resp = await client.request(method, path, json=body, headers=bob)
-        assert resp.status_code == 404, (method, path)
-    assert (await client.get("/api/setlists", headers=bob)).json() == []
-    assert (await client.get("/api/setlists")).status_code == 401
-
-
-async def test_setlist_rejects_bad_names_and_unknown_or_hidden_tabs(client):
-    owner = await _login(client, "owner4")
-    user = await _login(client, "user4")
-    draft = (await client.post("/api/tabs", json=_tab(publish=False), headers=owner)).json()
-    assert (await client.post("/api/setlists", json={"name": "   "}, headers=user)).status_code == 400
-    assert (await client.post("/api/setlists", json={"name": "x" * 101}, headers=user)).status_code == 400
-
-    setlist = (await client.post("/api/setlists", json={"name": "Jam"}, headers=user)).json()
-    for tab_id in ["does-not-exist", draft["id"]]:
-        resp = await client.post(f"/api/setlists/{setlist['id']}/tabs", json={"tab_id": tab_id}, headers=user)
-        assert resp.status_code == 404

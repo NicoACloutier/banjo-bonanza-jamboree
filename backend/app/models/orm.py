@@ -47,7 +47,6 @@ class User(Base):
     tabs: Mapped[list["Tab"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     votes: Mapped[list["Vote"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     favorites: Mapped[list["Favorite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    setlists: Mapped[list["Setlist"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -302,36 +301,3 @@ class Favorite(Base):
 
     tab: Mapped[Tab] = relationship(back_populates="favorites")
     user: Mapped[User] = relationship(back_populates="favorites")
-
-
-class Setlist(Base):
-    """An ordered list of tabs a user plans to play (e.g. for a jam), private to its owner."""
-
-    __tablename__ = "setlists"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    owner: Mapped[User] = relationship(back_populates="setlists")
-    items: Mapped[list["SetlistItem"]] = relationship(
-        back_populates="setlist", cascade="all, delete-orphan", order_by="SetlistItem.position"
-    )
-
-
-class SetlistItem(Base):
-    """One tab's place in a setlist."""
-
-    __tablename__ = "setlist_items"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
-    setlist_id: Mapped[str] = mapped_column(ForeignKey("setlists.id", ondelete="CASCADE"), index=True)
-    tab_id: Mapped[str] = mapped_column(ForeignKey("tabs.id", ondelete="CASCADE"), index=True)
-    position: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    setlist: Mapped[Setlist] = relationship(back_populates="items")
-    tab: Mapped[Tab] = relationship()

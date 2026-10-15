@@ -217,20 +217,6 @@ export interface FavoriteResponse {
   is_favorited: boolean;
 }
 
-export interface SetlistSummary {
-  id: string;
-  name: string;
-  tab_count: number;
-  updated_at: string;
-}
-
-export interface SetlistDetail {
-  id: string;
-  name: string;
-  updated_at: string;
-  tabs: TabSummary[];
-}
-
 /** Optional filters for browsing/searching published tabs. */
 export interface TabSearchFilters {
   q?: string;

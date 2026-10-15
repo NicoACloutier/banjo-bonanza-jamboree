@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearTokens();
-    // Don't leave this user's cached setlists/favorites on the device.
+    // Don't leave this user's cached tabs/favorites on the device.
     void clearCachedApiData();
     setUser(null);
   }, []);

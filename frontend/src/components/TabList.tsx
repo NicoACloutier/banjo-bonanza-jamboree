@@ -1,7 +1,6 @@
 /**
  * A list of tab summaries (song, artist, tuning/style/key/difficulty tags,
- * owner and votes), shared by the browse, profile, favorites and setlist
- * pages. `renderActions` adds per-row controls (e.g. reordering a setlist).
+ * owner and votes), shared by the browse, profile and favorites pages.
  */
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -14,17 +13,16 @@ interface TabListProps {
   emptyMessage: ReactNode;
   /** Hide the "by <owner>" line (e.g. on that owner's own profile). */
   showOwner?: boolean;
-  renderActions?: (tab: TabSummary, index: number) => ReactNode;
 }
 
 const tuningName = (key: string) => FALLBACK_TUNINGS.find((t) => t.key === key)?.display_name ?? key;
 
-export function TabList({ tabs, emptyMessage, showOwner = true, renderActions }: TabListProps) {
+export function TabList({ tabs, emptyMessage, showOwner = true }: TabListProps) {
   if (tabs.length === 0) return <p className="muted-text">{emptyMessage}</p>;
   return (
     <ul className="tab-list">
-      {tabs.map((tab, index) => (
-        <li className="tab-list-item" key={`${tab.id}-${index}`}>
+      {tabs.map((tab) => (
+        <li className="tab-list-item" key={tab.id}>
           <div>
             <Link to={`/tabs/${tab.id}`}>
               <strong>{tab.song_name}</strong>
@@ -44,7 +42,6 @@ export function TabList({ tabs, emptyMessage, showOwner = true, renderActions }:
             )}
           </div>
           <div className="tab-list-side">
-            {renderActions?.(tab, index)}
             <span className="vote-count">👍 {tab.vote_count}</span>
           </div>
         </li>

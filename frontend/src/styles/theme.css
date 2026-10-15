@@ -734,17 +734,6 @@ label select {
   margin: 0.25rem 0;
 }
 
-/* Small groups of controls that stay on one line inside a toolbar. */
-.inline-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.inline-controls select {
-  width: auto;
-}
-
 /* A chord diagram picked from the tab (by clicking its name). */
 .chord-cell {
   padding: 0.4rem;

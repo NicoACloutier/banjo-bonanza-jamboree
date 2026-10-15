@@ -3,9 +3,8 @@
  *
  * - The app shell (HTML, JS/CSS bundles, icons) is cached as it's loaded,
  *   and page navigations fall back to the cached shell when offline.
- * - Read-only API responses for tabs, setlists and favorites are cached
+ * - Read-only API responses for tabs and favorites are cached
  *   network-first: always fresh when online, the last copy when offline.
- *   (Saving a setlist for offline just fetches each of its tabs through here.)
  * - Everything else (auth, writes) goes straight to the network.
  *
  * Bump SHELL_CACHE/API_CACHE when changing caching behaviour.
@@ -14,7 +13,7 @@ const SHELL_CACHE = "bbj-shell-v1";
 const API_CACHE = "bbj-api-v1";
 const SHELL_URLS = ["/", "/manifest.webmanifest", "/icon.svg", "/icon-192.png"];
 // API paths whose GET responses are worth keeping for offline use.
-const CACHED_API_PATHS = [/^\/api\/tabs(\/|$)/, /^\/api\/setlists(\/|$)/, /^\/api\/me\/favorites$/];
+const CACHED_API_PATHS = [/^\/api\/tabs(\/|$)/, /^\/api\/me\/favorites$/];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_URLS)));

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import msgspec
 
-from app.models.orm import Note, NoteFret, RightHandFinger, Setlist, Tab, TabRevision, User
+from app.models.orm import Note, NoteFret, RightHandFinger, Tab, TabRevision, User
 from app.schemas.schemas import (
     ForkSource,
     NoteFretOut,
     NoteIn,
     NoteOut,
     RightHandFingerOut,
-    SetlistSummary,
     TabDetail,
     TabRevisionDetail,
     TabRevisionSummary,
@@ -167,11 +166,4 @@ def tab_revision_to_detail(revision: TabRevision) -> TabRevisionDetail:
         style=snapshot.get("style"),
         song_key=snapshot.get("song_key"),
         difficulty=snapshot.get("difficulty"),
-    )
-
-
-def setlist_to_summary(setlist: Setlist) -> SetlistSummary:
-    """`setlist.items` must be eager-loaded."""
-    return SetlistSummary(
-        id=setlist.id, name=setlist.name, tab_count=len(setlist.items), updated_at=setlist.updated_at
     )

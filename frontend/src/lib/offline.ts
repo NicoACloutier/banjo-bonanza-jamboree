@@ -1,9 +1,7 @@
 /**
- * Offline support: registers the service worker (see public/sw.js), and
- * pre-fetches tabs so the service worker caches them for use without a
- * connection (e.g. a whole setlist before a jam out of signal).
+ * Offline support: registers the service worker (see public/sw.js), which
+ * keeps the tabs you've opened available without a connection.
  */
-import { TabsApi } from "./api";
 
 /** Must match API_CACHE in public/sw.js. */
 const API_CACHE = "bbj-api-v1";
@@ -21,18 +19,4 @@ export function registerServiceWorker(): void {
       // Offline support is a nice-to-have; the app works without it.
     });
   });
-}
-
-/** Whether a service worker is controlling this page, i.e. fetched tabs will be cached. */
-export function offlineCachingAvailable(): boolean {
-  return typeof navigator !== "undefined" && Boolean(navigator.serviceWorker?.controller);
-}
-
-/**
- * Fetch each tab (and the tuning list) so the service worker caches it.
- * Returns how many tabs were saved; tabs that fail to load are skipped.
- */
-export async function saveTabsForOffline(tabIds: string[]): Promise<number> {
-  const results = await Promise.allSettled([TabsApi.tunings(), ...tabIds.map((id) => TabsApi.get(id))]);
-  return results.slice(1).filter((r) => r.status === "fulfilled").length;
 }

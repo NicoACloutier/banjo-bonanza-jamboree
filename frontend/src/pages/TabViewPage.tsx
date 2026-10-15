@@ -1,8 +1,7 @@
 /**
  * View + play a single tab: renders the tab sheet and its chord diagrams,
  * provides playback controls (tempo/transpose/auto-scroll), and lets
- * logged-in users vote, favorite, fork, add it to a setlist, or edit their
- * own tab.
+ * logged-in users vote, favorite, fork, or edit their own tab.
  */
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";

@@ -13,8 +13,6 @@ import { GoogleCallbackPage } from "./pages/GoogleCallbackPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
-import { SetlistPage } from "./pages/SetlistPage";
-import { SetlistsPage } from "./pages/SetlistsPage";
 import { TabEditorPage } from "./pages/TabEditorPage";
 import { TabViewPage } from "./pages/TabViewPage";
 import { TunerPage } from "./pages/TunerPage";
@@ -27,7 +25,7 @@ export default function App() {
       <Navbar />
       {!online && (
         <p className="offline-banner" role="status">
-          You're offline. Tabs you've opened before (and saved setlists) still work; saving and searching
+          You're offline. Tabs you've opened before still work; saving and searching
           need a connection.
         </p>
       )}
@@ -40,8 +38,6 @@ export default function App() {
         <Route path="/tuner" element={<TunerPage />} />
         <Route path="/chords" element={<ChordsPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
-        <Route path="/setlists" element={<SetlistsPage />} />
-        <Route path="/setlists/:setlistId" element={<SetlistPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
