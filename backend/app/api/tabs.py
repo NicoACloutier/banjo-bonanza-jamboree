@@ -440,7 +440,10 @@ async def search_tabs(
     total = int((await db.execute(count_query)).scalar_one())
 
     base_query = (
-        base_query.order_by(func.coalesce(vote_count_subq.c.vote_count, 0).desc(), Tab.created_at.desc())
+        # Tab.id breaks ties, so the order is stable and pages never overlap.
+        base_query.order_by(
+            func.coalesce(vote_count_subq.c.vote_count, 0).desc(), Tab.created_at.desc(), Tab.id
+        )
         .offset((page - 1) * page_size)
         .limit(page_size)
     )

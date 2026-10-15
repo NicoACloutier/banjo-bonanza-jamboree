@@ -68,6 +68,72 @@ describe("HomePage filters", () => {
   });
 });
 
+describe("HomePage pagination", () => {
+  const page = (n: number, total: number) => ({
+    items: Array.from({ length: Math.min(20, total - (n - 1) * 20) }, (_, i) => summary(`p${n}-${i}`)),
+    total,
+    page: n,
+    page_size: 20,
+  });
+
+  it("pages through results, keeping the page in the URL", async () => {
+    window.scrollTo = vi.fn();
+    api.search.mockImplementation(async (_filters, n: number) => page(n, 45));
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?style=clawhammer"]}>
+        <HomePage />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("Page 1 of 3")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /previous/i })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(await screen.findByText("Page 2 of 3")).toBeInTheDocument();
+    expect(api.search).toHaveBeenLastCalledWith({ style: "clawhammer" }, 2, 20);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=2");
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(await screen.findByText("Page 3 of 3")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
+
+    // Changing a filter goes back to the first page.
+    await user.selectOptions(screen.getByLabelText(/difficulty/i), "beginner");
+    await waitFor(() =>
+      expect(api.search).toHaveBeenLastCalledWith({ style: "clawhammer", difficulty: "beginner" }, 1, 20),
+    );
+    expect(screen.getByTestId("location")).not.toHaveTextContent("page=");
+  });
+
+  it("hides the controls when everything fits on one page", async () => {
+    api.search.mockResolvedValue(page(1, 3));
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Song p1-0");
+    expect(screen.queryByRole("navigation", { name: "Pages" })).not.toBeInTheDocument();
+  });
+
+  it("offers a way back from a page past the end", async () => {
+    api.search.mockImplementation(async (_filters, n: number) =>
+      n === 1 ? page(1, 3) : { ...page(1, 3), items: [], page: n },
+    );
+    window.scrollTo = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?page=9"]}>
+        <HomePage />
+      </MemoryRouter>,
+    );
+    await user.click(await screen.findByRole("button", { name: /go to the first page/i }));
+    expect(await screen.findByText("Song p1-0")).toBeInTheDocument();
+    expect(api.search).toHaveBeenLastCalledWith({}, 1, 20);
+  });
+});
+
 describe("TabLibraryActions", () => {
   const tab = { id: "t1", is_favorited: false } as TabDetail;
 

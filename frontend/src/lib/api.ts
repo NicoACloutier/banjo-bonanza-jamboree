@@ -12,6 +12,7 @@ import type {
   TabRevisionDetail,
   TabRevisionSummary,
   TabSearchFilters,
+  TabStatus,
   TabUpdateRequest,
   TokenResponse,
   TuningOut,
@@ -63,8 +64,8 @@ export const LibraryApi = {
 
 export const UsersApi = {
   get: (username: string) => apiRequest<UserPublic>(`/api/users/${username}`, { auth: false }),
-  tabs: (username: string, page: number, pageSize: number) =>
+  tabs: (username: string, page: number, pageSize: number, status?: TabStatus) =>
     apiRequest<TabListResponse>(`/api/users/${username}/tabs`, {
-      query: { page, page_size: pageSize },
+      query: { page, page_size: pageSize, status },
     }),
 };

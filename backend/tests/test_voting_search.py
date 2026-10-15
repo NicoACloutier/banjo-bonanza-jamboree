@@ -209,3 +209,43 @@ async def test_search_pagination_bounds(client):
     assert second.status_code == 200
     assert second.json()["has_voted"] is False
     assert second.json()["vote_count"] == 0
+
+
+async def test_pages_never_overlap_when_tabs_tie(client):
+    # Tabs created together tie on votes and (to the second) on creation time.
+    owner = await _register_and_login(client, "tieowner")
+    created = {await _create_published_tab(client, owner, f"Tie Song {i}") for i in range(7)}
+    seen = []
+    for page in range(1, 5):
+        resp = await client.get("/api/tabs", params={"q": "Tie Song", "page": page, "page_size": 2})
+        seen += [item["id"] for item in resp.json()["items"]]
+    assert sorted(seen) == sorted(created)
+
+
+async def test_user_tabs_can_be_paged_by_status(client):
+    owner = await _register_and_login(client, "pagedowner")
+    for i in range(3):
+        await _create_published_tab(client, owner, f"Published {i}")
+    for i in range(5):
+        await client.post(
+            "/api/tabs",
+            json={"song_name": f"Draft {i}", "tuning_key": "standard_g", "notes": [], "publish": False},
+            headers=owner,
+        )
+
+    async def listing(status, page, headers=None):
+        params = {"status": status, "page": page, "page_size": 2}
+        return (await client.get("/api/users/pagedowner/tabs", params=params, headers=headers)).json()
+
+    drafts = await listing("draft", 3, owner)
+    assert drafts["total"] == 5
+    assert [t["status"] for t in drafts["items"]] == ["draft"]
+    published = await listing("published", 2, owner)
+    assert published["total"] == 3
+    assert [t["status"] for t in published["items"]] == ["published"]
+
+    # Nobody else sees the drafts, even by asking for them.
+    assert (await listing("draft", 1))["total"] == 0
+    assert (await listing("published", 1))["total"] == 3
+    bad = await client.get("/api/users/pagedowner/tabs", params={"status": "deleted"})
+    assert bad.status_code == 422

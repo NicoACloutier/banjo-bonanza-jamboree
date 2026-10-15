@@ -31,12 +31,16 @@ async def get_user_tabs(
     username: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    tab_status: TabStatus | None = Query(
+        default=None, alias="status", description="Only drafts or only published tabs (default: both)"
+    ),
     db: AsyncSession = Depends(get_db),
     viewer: User | None = Depends(get_optional_user),
 ) -> MsgspecResponse:
     """
     List a user's tabs. Published tabs are visible to everyone; drafts are
-    only visible to the owner viewing their own profile.
+    only visible to the owner viewing their own profile (anyone else asking
+    for drafts gets an empty list).
     """
     result = await db.execute(select(User).where(User.username == username))
     owner = result.scalar_one_or_none()
@@ -44,14 +48,16 @@ async def get_user_tabs(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     is_self = viewer is not None and viewer.id == owner.id
-    query = select(Tab).where(Tab.owner_id == owner.id).options(selectinload(Tab.owner))
-    count_query = select(func.count()).select_from(Tab).where(Tab.owner_id == owner.id)
+    filters = [Tab.owner_id == owner.id]
     if not is_self:
-        query = query.where(Tab.status == TabStatus.published)
-        count_query = count_query.where(Tab.status == TabStatus.published)
+        filters.append(Tab.status == TabStatus.published)
+    if tab_status is not None:
+        filters.append(Tab.status == tab_status)
+    query = select(Tab).where(*filters).options(selectinload(Tab.owner))
+    count_query = select(func.count()).select_from(Tab).where(*filters)
 
     total = int((await db.execute(count_query)).scalar_one())
-    query = query.order_by(Tab.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    query = query.order_by(Tab.updated_at.desc(), Tab.id).offset((page - 1) * page_size).limit(page_size)
     tabs = (await db.execute(query)).scalars().all()
 
     items = []
