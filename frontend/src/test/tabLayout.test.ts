@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  noteLocation,
+  noteRange,
   computePlaybackSchedule,
   effectiveBeats,
   splitIntoLines,
@@ -472,5 +474,24 @@ describe("tabLayout", () => {
       expect([...barBreakIndices(18, 2)]).toEqual([9]);
       expect([...barBreakIndices(20, 4)]).toEqual([5, 10, 15]);
     });
+  });
+});
+
+describe("loop section helpers", () => {
+  const ids = (notes: NoteOut[]) => notes.map((n) => n.id);
+  const notes = ["a", "b", "c", "d"].map((id, position) => ({ id, position }) as NoteOut);
+
+  it("noteRange takes the notes between two ids, in either order", () => {
+    expect(ids(noteRange(notes, "b", "d"))).toEqual(["b", "c", "d"]);
+    expect(ids(noteRange(notes, "d", "b"))).toEqual(["b", "c", "d"]);
+    expect(ids(noteRange(notes, "c", "c"))).toEqual(["c"]);
+    expect(noteRange(notes, "a", "zz")).toEqual([]);
+  });
+
+  it("noteLocation counts lines and notes from 1", () => {
+    const lines = [notes.slice(0, 2), notes.slice(2)];
+    expect(noteLocation(lines, "a")).toEqual({ line: 1, note: 1 });
+    expect(noteLocation(lines, "d")).toEqual({ line: 2, note: 2 });
+    expect(noteLocation(lines, "zz")).toBeNull();
   });
 });

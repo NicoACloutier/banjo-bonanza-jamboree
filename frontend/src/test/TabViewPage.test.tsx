@@ -34,15 +34,18 @@ const tab: TabDetail = {
 };
 
 const api = vi.hoisted(() => ({ remove: vi.fn(async () => undefined) }));
+// Tests can swap in a tab with notes.
+const shown = vi.hoisted(() => ({ tab: null as TabDetail | null }));
 vi.mock("../lib/api", () => ({
-  TabsApi: { get: vi.fn(async () => tab), remove: api.remove },
+  TabsApi: { get: vi.fn(async () => shown.tab ?? tab), remove: api.remove },
 }));
 const auth = vi.hoisted(() => ({ current: { user: null as { id: string; username: string; is_admin?: boolean } | null } }));
 vi.mock("../hooks/useAuth", () => ({ useAuth: () => auth.current }));
 // No Web Audio in the test environment.
+const engine = vi.hoisted(() => ({ play: vi.fn() }));
 vi.mock("../lib/playbackEngine", () => ({
   TabPlaybackEngine: class {
-    play = vi.fn();
+    play = engine.play;
     stop = vi.fn();
     dispose = vi.fn();
   },
@@ -58,7 +61,9 @@ vi.mock("../lib/metronome", () => ({
 afterEach(() => {
   vi.restoreAllMocks();
   api.remove.mockClear();
+  engine.play.mockClear();
   auth.current = { user: null };
+  shown.tab = null;
 });
 
 describe("TabViewPage auto-scroll", () => {
@@ -143,5 +148,90 @@ describe("TabViewPage deleting", () => {
     await user.click(screen.getByRole("button", { name: /yes, delete/i }));
     expect(api.remove).toHaveBeenCalledWith("t1");
     expect(await screen.findByText("Profile page")).toBeInTheDocument();
+  });
+});
+
+describe("TabViewPage loop section", () => {
+  // Six quarter notes on the 3rd string, at frets 1-6 (so each cell's text is unique).
+  const notes = Array.from({ length: 6 }, (_, i) => ({
+    id: `n${i}`,
+    position: i,
+    duration_beats: 1,
+    line_break: false,
+    lyric: null,
+    is_rest: false,
+    thumb_after: false,
+    dotted: false,
+    triplet: false,
+    tied: false,
+    chord: null,
+    frets: [
+      {
+        string_number: 3,
+        fret: i + 1,
+        technique: "normal" as const,
+        slide_to_fret: null,
+        bend_semitones: null,
+        right_hand_finger: null,
+      },
+    ],
+  }));
+  const cell = (fret: number) =>
+    screen.getAllByText(String(fret)).find((el) => el.classList.contains("tab-fret-cell")) as HTMLElement;
+
+  function renderTab() {
+    shown.tab = { ...tab, notes };
+    return render(
+      <MemoryRouter initialEntries={["/tabs/t1"]}>
+        <Routes>
+          <Route path="/tabs/:tabId" element={<TabViewPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("is picked by clicking the first and last notes, then loops just those", async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(await screen.findByRole("checkbox", { name: /loop section/i }));
+    expect(screen.getByText(/click the first note of the section/i)).toBeInTheDocument();
+
+    await user.click(cell(5));
+    expect(screen.getByText(/now click the last note/i)).toBeInTheDocument();
+    await user.click(cell(2)); // before the first click: the section still runs in tab order
+    expect(screen.getByText("Looping 4 notes: line 1, note 2 to line 1, note 5.")).toBeInTheDocument();
+    expect([1, 2, 3, 4, 5, 6].map((fret) => cell(fret).classList.contains("highlighted"))).toEqual([
+      false, true, true, true, true, false,
+    ]);
+
+    await user.click(screen.getByRole("button", { name: /play/i }));
+    expect(engine.play.mock.calls[0][4].loop).toEqual({ startPosition: 1, endPosition: 4 });
+  });
+
+  it("starts a new section on a third click, and can be cleared", async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(await screen.findByRole("checkbox", { name: /loop section/i }));
+    await user.click(cell(1));
+    await user.click(cell(3));
+    await user.click(cell(6));
+    expect(screen.getByText(/now click the last note/i)).toBeInTheDocument();
+    expect(cell(6)).toHaveClass("highlighted");
+    expect(cell(1)).not.toHaveClass("highlighted");
+
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText(/click the first note of the section/i)).toBeInTheDocument();
+  });
+
+  it("plays the whole tab when the loop is off or unfinished, and notes aren't clickable", async () => {
+    const user = userEvent.setup();
+    renderTab();
+    const loopToggle = await screen.findByRole("checkbox", { name: /loop section/i });
+    await user.click(cell(2)); // loop off: clicking does nothing
+    await user.click(loopToggle);
+    expect(cell(2)).not.toHaveClass("highlighted");
+    await user.click(cell(2)); // only the first note picked
+    await user.click(screen.getByRole("button", { name: /play/i }));
+    expect(engine.play.mock.calls[0][4].loop).toBeUndefined();
   });
 });

@@ -16,14 +16,9 @@ import { ApiRequestError } from "../lib/apiClient";
 import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
 import { Metronome } from "../lib/metronome";
-import { meterOf, splitIntoLines } from "../lib/tabLayout";
+import { meterOf, noteLocation, noteRange, splitIntoLines } from "../lib/tabLayout";
 import { chordsUsed, DIFFICULTY_LABELS, playOptionsFor, STYLE_LABELS } from "../lib/tabSettings";
-import type { TabDetail, TabRevisionSummary, TuningOut } from "../types/api";
-
-/** A tab's lines, as the tab sheet lays them out (for the loop pickers). */
-function linesOf(tab: TabDetail) {
-  return splitIntoLines(tab.notes);
-}
+import type { NoteOut, TabDetail, TabRevisionSummary, TuningOut } from "../types/api";
 
 export function TabViewPage() {
   const { tabId } = useParams();
@@ -48,10 +43,9 @@ export function TabViewPage() {
   // number within that line) in the preview, then toggles loop mode so
   // playback repeats just that region indefinitely. `null` for a line means
   // "no note chosen yet" for that end of the range.
-  const [loopStartLine, setLoopStartLine] = useState<number | null>(null);
-  const [loopStartNoteInLine, setLoopStartNoteInLine] = useState(0);
-  const [loopEndLine, setLoopEndLine] = useState<number | null>(null);
-  const [loopEndNoteInLine, setLoopEndNoteInLine] = useState(0);
+  // The section is picked by clicking its first and last notes on the sheet.
+  const [loopFirstId, setLoopFirstId] = useState<string | null>(null);
+  const [loopLastId, setLoopLastId] = useState<string | null>(null);
   const [loopEnabled, setLoopEnabled] = useState(false);
 
   // Metronome: an independent click track with its own on/off toggle,
@@ -121,18 +115,10 @@ export function TabViewPage() {
 
   const handlePlay = () => {
     if (!tab || !tuning) return;
-    const lines = linesOf(tab);
-    const loopStartNote = loopStartLine !== null ? (lines[loopStartLine]?.[loopStartNoteInLine] ?? null) : null;
-    const loopEndNote = loopEndLine !== null ? (lines[loopEndLine]?.[loopEndNoteInLine] ?? null) : null;
+    const section = loopEnabled && loopFirstId && loopLastId ? noteRange(tab.notes, loopFirstId, loopLastId) : [];
     const loop =
-      loopEnabled && loopStartNote && loopEndNote
-        ? (() => {
-            const startIdx = tab.notes.findIndex((n) => n.id === loopStartNote.id);
-            const endIdx = tab.notes.findIndex((n) => n.id === loopEndNote.id);
-            if (startIdx === -1 || endIdx === -1) return undefined;
-            const [lo, hi] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-            return { startPosition: tab.notes[lo].position, endPosition: tab.notes[hi].position };
-          })()
+      section.length > 0
+        ? { startPosition: section[0].position, endPosition: section[section.length - 1].position }
         : undefined;
     engineRef.current?.play(tab.notes, tuning, tempoBpm, transposeSemitones, {
       ...playOptionsFor(tab),
@@ -237,11 +223,31 @@ export function TabViewPage() {
     </>,
   ].filter(Boolean);
 
-  const lines = linesOf(tab);
-  const totalLines = Math.max(1, lines.length);
-  const notesInLine = (lineIdx: number) => lines[lineIdx]?.length ?? 0;
-  const loopStartNote = loopStartLine !== null ? (lines[loopStartLine]?.[loopStartNoteInLine] ?? null) : null;
-  const loopEndNote = loopEndLine !== null ? (lines[loopEndLine]?.[loopEndNoteInLine] ?? null) : null;
+  // Picking the loop section: the first click sets its first note, the
+  // second its last; clicking again starts a new section.
+  const pickLoopNote = (note: NoteOut) => {
+    if (loopFirstId === null || loopLastId !== null) {
+      setLoopFirstId(note.id);
+      setLoopLastId(null);
+    } else {
+      setLoopLastId(note.id);
+    }
+  };
+  const lines = splitIntoLines(tab.notes);
+  const loopSection = loopFirstId && loopLastId ? noteRange(tab.notes, loopFirstId, loopLastId) : [];
+  const loopHighlight = new Set(loopSection.length > 0 ? loopSection.map((n) => n.id) : loopFirstId ? [loopFirstId] : []);
+  const describe = (noteId: string) => {
+    const where = noteLocation(lines, noteId);
+    return where ? `line ${where.line}, note ${where.note}` : "";
+  };
+  let loopStatus = "Click the first note of the section on the tab.";
+  if (loopSection.length > 0) {
+    const first = loopSection[0];
+    const last = loopSection[loopSection.length - 1];
+    loopStatus = `Looping ${loopSection.length} note${loopSection.length === 1 ? "" : "s"}: ${describe(first.id)} to ${describe(last.id)}.`;
+  } else if (loopFirstId) {
+    loopStatus = "Now click the last note of the section.";
+  }
 
   return (
     <div className="panel tab-view-page">
@@ -350,78 +356,26 @@ export function TabViewPage() {
           Count-in
         </label>
         <label>
-          <input
-            type="checkbox"
-            checked={loopEnabled}
-            onChange={(e) => setLoopEnabled(e.target.checked)}
-            disabled={!loopStartNote || !loopEndNote}
-          />
+          <input type="checkbox" checked={loopEnabled} onChange={(e) => setLoopEnabled(e.target.checked)} />
           Loop section
         </label>
-        <label>
-          Loop start (line)
-          <select
-            value={loopStartLine ?? ""}
-            onChange={(e) => {
-              const value = e.target.value;
-              setLoopStartLine(value === "" ? null : Number(value));
-              setLoopStartNoteInLine(0);
-            }}
-          >
-            <option value="">(none)</option>
-            {Array.from({ length: totalLines }, (_, i) => (
-              <option key={i} value={i}>
-                Line {i + 1}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Loop start (note in line)
-          <select
-            value={loopStartNoteInLine}
-            onChange={(e) => setLoopStartNoteInLine(Number(e.target.value))}
-            disabled={loopStartLine === null}
-          >
-            {Array.from({ length: loopStartLine !== null ? notesInLine(loopStartLine) : 0 }, (_, i) => (
-              <option key={i} value={i}>
-                Note {i + 1}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Loop end (line)
-          <select
-            value={loopEndLine ?? ""}
-            onChange={(e) => {
-              const value = e.target.value;
-              setLoopEndLine(value === "" ? null : Number(value));
-              setLoopEndNoteInLine(0);
-            }}
-          >
-            <option value="">(none)</option>
-            {Array.from({ length: totalLines }, (_, i) => (
-              <option key={i} value={i}>
-                Line {i + 1}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Loop end (note in line)
-          <select
-            value={loopEndNoteInLine}
-            onChange={(e) => setLoopEndNoteInLine(Number(e.target.value))}
-            disabled={loopEndLine === null}
-          >
-            {Array.from({ length: loopEndLine !== null ? notesInLine(loopEndLine) : 0 }, (_, i) => (
-              <option key={i} value={i}>
-                Note {i + 1}
-              </option>
-            ))}
-          </select>
-        </label>
+        {loopEnabled && (
+          <span role="status">
+            {loopStatus}{" "}
+            {loopFirstId && (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setLoopFirstId(null);
+                  setLoopLastId(null);
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </span>
+        )}
       </div>
 
       <TabRenderer
@@ -430,6 +384,9 @@ export function TabViewPage() {
         clawhammerTiming={tab.clawhammer_timing}
         playingNoteId={playingNoteId}
         onChordClick={setHighlightedChord}
+        onNoteClick={loopEnabled ? pickLoopNote : undefined}
+        noteClickTitle={loopFirstId === null || loopLastId !== null ? "Start the loop here" : "End the loop here"}
+        highlightedNoteIds={loopEnabled ? loopHighlight : undefined}
       />
 
       <TabChords

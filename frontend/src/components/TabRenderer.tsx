@@ -142,6 +142,10 @@ interface TabRendererProps {
   playingNoteId?: string | null;
   selectedNoteId?: string | null;
   onNoteClick?: (note: NoteOut) => void;
+  /** Read-only mode: what clicking a note does, shown as its tooltip (e.g. "Start the loop here"). */
+  noteClickTitle?: string;
+  /** Notes to highlight as a group (e.g. the section being looped). */
+  highlightedNoteIds?: ReadonlySet<string>;
   /**
    * Supplying this callback switches the renderer into editable mode.
    * Called when the user commits a fret value for one string of one note
@@ -174,6 +178,8 @@ export function TabRenderer({
   playingNoteId,
   selectedNoteId,
   onNoteClick,
+  noteClickTitle,
+  highlightedNoteIds,
   onFretChange,
   onLyricChange,
   onDurationCycle,
@@ -347,6 +353,7 @@ export function TabRenderer({
                         "tab-fret-cell",
                         isPlaying ? "playing" : "",
                         isSelected ? "selected" : "",
+                        highlightedNoteIds?.has(note.id) ? "highlighted" : "",
                         onNoteClick || editable ? "clickable" : "",
                         fretOnThisString && isChord ? "chord-member" : "",
                         fretOnThisString?.technique === "drop_thumb" ? "drop-thumb" : "",
@@ -376,7 +383,7 @@ export function TabRenderer({
                         onNoteClick || editable
                           ? editable
                             ? "Click to type a fret for this string"
-                            : "Click to select/edit this note"
+                            : (noteClickTitle ?? "Click to select/edit this note")
                           : undefined
                       }
                     >

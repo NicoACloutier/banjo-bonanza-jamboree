@@ -263,6 +263,27 @@ export function splitIntoLines(notes: NoteOut[]): NoteOut[][] {
   return lines;
 }
 
+/**
+ * The notes from one note to another, inclusive and in position order,
+ * whichever of the two comes first. Empty if either id isn't in `notes`.
+ */
+export function noteRange(notes: NoteOut[], fromId: string, toId: string): NoteOut[] {
+  const sorted = [...notes].sort((a, b) => a.position - b.position);
+  const from = sorted.findIndex((n) => n.id === fromId);
+  const to = sorted.findIndex((n) => n.id === toId);
+  if (from === -1 || to === -1) return [];
+  return sorted.slice(Math.min(from, to), Math.max(from, to) + 1);
+}
+
+/** Where a note sits on the sheet, counting from 1 (e.g. line 2, note 5), or null if it isn't there. */
+export function noteLocation(lines: NoteOut[][], noteId: string): { line: number; note: number } | null {
+  for (let line = 0; line < lines.length; line++) {
+    const note = lines[line].findIndex((n) => n.id === noteId);
+    if (note !== -1) return { line: line + 1, note: note + 1 };
+  }
+  return null;
+}
+
 /** Renumber positions 0..n-1 in array order. */
 function reindex(notes: NoteOut[]): NoteOut[] {
   return notes.map((n, position) => ({ ...n, position }));
