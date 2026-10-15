@@ -6,11 +6,16 @@
  * Playback position updates are reported via `onProgress`, which callers
  * (e.g. the auto-scroll feature) can use to know which note is currently
  * sounding.
+ *
+ * An optional count-in clicks one bar of the tab's meter before the first
+ * note, on the same audio clock, so the notes come in exactly on time.
  */
+import { scheduleClick } from "./metronome";
 import { applyFadeEnvelope, synthesizePitchChange, synthesizePluck, synthesizeSlide } from "./pluckSynth";
 import {
   computePlaybackSchedule,
   totalDurationSeconds,
+  type Meter,
   type ScheduleOptions,
   type SoundEvent,
   type TimedNote,
@@ -50,6 +55,8 @@ function synthesizeSound(sound: SoundEvent, sampleRate: number, durationSeconds:
 export interface PlayOptions extends ScheduleOptions {
   /** Repeat just the notes between these positions (inclusive) until stopped. */
   loop?: { startPosition: number; endPosition: number };
+  /** Click one bar of this meter before the first note (not before each loop repeat). */
+  countIn?: Meter;
 }
 
 export interface PlaybackCallbacks {
@@ -59,7 +66,7 @@ export interface PlaybackCallbacks {
 
 export class TabPlaybackEngine {
   private audioContext: AudioContext | null = null;
-  private sources: AudioBufferSourceNode[] = [];
+  private sources: AudioScheduledSourceNode[] = [];
   private rafHandle: number | null = null;
   private startedAtContextTime = 0;
   private schedule: TimedNote[] = [];
@@ -110,8 +117,22 @@ export class TabPlaybackEngine {
     }
     this.schedule = computePlaybackSchedule(scheduleNotes, tuning, tempoBpm, transposeSemitones, options);
     this.durationSeconds = totalDurationSeconds(scheduleNotes, tempoBpm, options.swing);
-    this.loopOptions = options.loop ? { notes, tuning, tempoBpm, transposeSemitones, options } : null;
-    this.startedAtContextTime = ctx.currentTime + 0.05;
+    // Loop repeats come straight back in, without another count-in.
+    this.loopOptions = options.loop
+      ? { notes, tuning, tempoBpm, transposeSemitones, options: { ...options, countIn: undefined } }
+      : null;
+    const clicksStartAt = ctx.currentTime + 0.05;
+    let countInSeconds = 0;
+    if (options.countIn) {
+      const pulseSeconds = options.countIn.pulseBeats * (60 / tempoBpm);
+      for (let pulse = 0; pulse < options.countIn.pulsesPerBar; pulse++) {
+        this.sources.push(scheduleClick(ctx, clicksStartAt + pulse * pulseSeconds, pulse === 0));
+      }
+      countInSeconds = options.countIn.pulsesPerBar * pulseSeconds;
+    }
+    // Notes start after the count-in; until then the elapsed time (and so
+    // onProgress's position) stays at 0 with no current note.
+    this.startedAtContextTime = clicksStartAt + countInSeconds;
     this.playing = true;
 
     for (const note of this.schedule) {
@@ -140,7 +161,7 @@ export class TabPlaybackEngine {
 
     this.tick();
 
-    const totalMs = this.durationSeconds * 1000 + 200;
+    const totalMs = (countInSeconds + this.durationSeconds) * 1000 + 200;
     window.setTimeout(() => {
       if (!this.playing) return;
       if (this.loopOptions) {

@@ -4,7 +4,7 @@
  * Kept free of DOM/Web Audio dependencies so it is easily unit-testable.
  */
 import { frettedFrequency } from "./audioTheory";
-import type { NoteOut, TuningOut } from "../types/api";
+import type { NoteOut, TimeSignature, TuningOut } from "../types/api";
 
 /** One string's sounding event within a (possibly chordal) note slot. */
 export interface SoundEvent {
@@ -26,6 +26,22 @@ export interface SoundEvent {
    * sound that later notes are tied to keeps ringing through them.
    */
   durationSeconds?: number;
+}
+
+/** How a time signature is counted: clicks per bar, and how long each click is. */
+export interface Meter {
+  /** Length of one counted pulse, in beats (quarter notes). */
+  pulseBeats: number;
+  pulsesPerBar: number;
+}
+
+/**
+ * The counted pulse of a time signature: quarter notes for 2/4, 3/4 and 4/4,
+ * and dotted quarters (two per bar) for 6/8, which is felt in two.
+ */
+export function meterOf(timeSignature: TimeSignature): Meter {
+  if (timeSignature === "6/8") return { pulseBeats: 1.5, pulsesPerBar: 2 };
+  return { pulseBeats: 1, pulsesPerBar: { "2/4": 2, "3/4": 3, "4/4": 4 }[timeSignature] };
 }
 
 /** A note's length in beats (quarter notes), after its dotted/triplet modifiers. */

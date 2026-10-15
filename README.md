@@ -10,7 +10,8 @@ tablature, with an added tuner.
   render below each line of tab.
 - **Automatic playback**: a Web Audio API plucked-string (Karplus-Strong)
   synth plays the tab back note-by-note, with adjustable tempo and
-  transposition.
+  transposition, and an optional one-bar count-in. The metronome follows the
+  tab's time signature, accenting the first beat of each bar.
 - **Auto-scroll**: adjustable-speed auto-scroll while playing, like a
   teleprompter.
 - **Voting**: users can vote on their preferred tabs.

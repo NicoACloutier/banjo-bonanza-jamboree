@@ -112,7 +112,8 @@ class Tab(Base):
     # Clawhammer mode: notes may set `thumb_after` to pluck the 5th string on
     # the off-beat after them.
     clawhammer_timing: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Time signature ("2/4", "3/4", "4/4" or "6/8"), shown with the tab.
+    # Time signature ("2/4", "3/4", "4/4" or "6/8"): shown with the tab, and
+    # sets the metronome's accents and the count-in when playing it.
     # NULL if not set (e.g. tabs from before time signatures existed).
     time_signature: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # Swing feel: pairs of eighth notes play long-short (2:1).

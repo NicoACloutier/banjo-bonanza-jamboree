@@ -16,7 +16,7 @@ import { ApiRequestError } from "../lib/apiClient";
 import { FALLBACK_TUNINGS, getFallbackTuning } from "../lib/tunings";
 import { TabPlaybackEngine } from "../lib/playbackEngine";
 import { Metronome } from "../lib/metronome";
-import { splitIntoLines } from "../lib/tabLayout";
+import { meterOf, splitIntoLines } from "../lib/tabLayout";
 import { chordsUsed, DIFFICULTY_LABELS, playOptionsFor, STYLE_LABELS } from "../lib/tabSettings";
 import type { TabDetail, TabRevisionSummary, TuningOut } from "../types/api";
 
@@ -58,6 +58,8 @@ export function TabViewPage() {
   // reusing the same tempo control as playback.
   const [metronomeOn, setMetronomeOn] = useState(false);
   const metronomeRef = useRef<Metronome | null>(null);
+  // Click one bar before playback starts (in the tab's time signature, or 4/4).
+  const [countIn, setCountIn] = useState(false);
 
   // Revision history (owner-only): lets the tab's owner browse and restore
   // prior saved versions.
@@ -132,7 +134,11 @@ export function TabViewPage() {
             return { startPosition: tab.notes[lo].position, endPosition: tab.notes[hi].position };
           })()
         : undefined;
-    engineRef.current?.play(tab.notes, tuning, tempoBpm, transposeSemitones, { ...playOptionsFor(tab), loop });
+    engineRef.current?.play(tab.notes, tuning, tempoBpm, transposeSemitones, {
+      ...playOptionsFor(tab),
+      loop,
+      countIn: countIn ? meterOf(tab.time_signature ?? "4/4") : undefined,
+    });
     setIsPlaying(true);
     if (autoScroll) {
       scrollIntervalRef.current = window.setInterval(() => {
@@ -151,14 +157,18 @@ export function TabViewPage() {
       metronomeRef.current?.stop();
       setMetronomeOn(false);
     } else {
-      metronomeRef.current?.start(tempoBpm);
+      metronomeRef.current?.start(tempoBpm, metronomeMeter());
       setMetronomeOn(true);
     }
   };
 
+  // The metronome counts in the tab's time signature (accenting each bar's
+  // first click); tabs without one get a plain click every beat.
+  const metronomeMeter = () => (tab?.time_signature ? meterOf(tab.time_signature) : null);
+
   // Keep a running metronome in sync if the tempo slider changes mid-click.
   useEffect(() => {
-    if (metronomeOn) metronomeRef.current?.start(tempoBpm);
+    if (metronomeOn) metronomeRef.current?.start(tempoBpm, metronomeMeter());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tempoBpm]);
 
@@ -333,7 +343,11 @@ export function TabViewPage() {
       <div className="toolbar no-print">
         <label>
           <input type="checkbox" checked={metronomeOn} onChange={toggleMetronome} />
-          Metronome
+          Metronome{tab.time_signature && ` (${tab.time_signature})`}
+        </label>
+        <label title="Click one bar before the first note, so you can come in on time">
+          <input type="checkbox" checked={countIn} onChange={(e) => setCountIn(e.target.checked)} />
+          Count-in
         </label>
         <label>
           <input
