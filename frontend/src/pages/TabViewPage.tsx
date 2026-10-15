@@ -65,6 +65,10 @@ export function TabViewPage() {
   const [revisions, setRevisions] = useState<TabRevisionSummary[]>([]);
   const [showRevisions, setShowRevisions] = useState(false);
 
+  // Deleting the tab (owner only), confirmed inline first.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const engineRef = useRef<TabPlaybackEngine | null>(null);
   const scrollIntervalRef = useRef<number | null>(null);
 
@@ -159,6 +163,17 @@ export function TabViewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tempoBpm]);
 
+  const handleDelete = async () => {
+    if (!tab) return;
+    setDeleteError(null);
+    try {
+      await TabsApi.remove(tab.id);
+      navigate(`/users/${tab.owner_username}`);
+    } catch (err) {
+      setDeleteError(err instanceof ApiRequestError ? err.message : "Failed to delete the tab.");
+    }
+  };
+
   const handleVote = async () => {
     if (!tab) return;
     try {
@@ -238,8 +253,23 @@ export function TabViewPage() {
               History
             </button>
           )}
+          {isOwner && !confirmingDelete && (
+            <button className="secondary" onClick={() => setConfirmingDelete(true)}>
+              Delete
+            </button>
+          )}
         </div>
       </div>
+      {confirmingDelete && (
+        <div className="toolbar no-print" role="alert">
+          <span>Delete this tab? This can't be undone.</span>
+          <button onClick={handleDelete}>Yes, delete</button>
+          <button className="secondary" onClick={() => setConfirmingDelete(false)}>
+            Cancel
+          </button>
+          {deleteError && <span className="error-banner">{deleteError}</span>}
+        </div>
+      )}
       <div className="tag-row">
         {tab.time_signature && <span className="tag">{tab.time_signature}</span>}
         {tab.swing && <span className="tag">Swing</span>}

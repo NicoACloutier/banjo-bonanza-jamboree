@@ -33,8 +33,14 @@ const tab: TabDetail = {
   difficulty: null,
 };
 
-vi.mock("../lib/api", () => ({ TabsApi: { get: vi.fn(async () => tab) } }));
-vi.mock("../hooks/useAuth", () => ({ useAuth: () => ({ user: null }) }));
+const api = vi.hoisted(() => ({ remove: vi.fn(async () => undefined) }));
+vi.mock("../lib/api", () => ({
+  TabsApi: { get: vi.fn(async () => tab), remove: api.remove },
+  // Logged-in users also get the favorite/fork/setlist actions.
+  LibraryApi: { setlists: vi.fn(async () => []) },
+}));
+const auth = vi.hoisted(() => ({ current: { user: null as { id: string; username: string } | null } }));
+vi.mock("../hooks/useAuth", () => ({ useAuth: () => auth.current }));
 // No Web Audio in the test environment.
 vi.mock("../lib/playbackEngine", () => ({
   TabPlaybackEngine: class {
@@ -51,7 +57,11 @@ vi.mock("../lib/metronome", () => ({
   },
 }));
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  api.remove.mockClear();
+  auth.current = { user: null };
+});
 
 describe("TabViewPage auto-scroll", () => {
   it("stops auto-scrolling when the user leaves the page mid-playback", async () => {
@@ -79,5 +89,49 @@ describe("TabViewPage auto-scroll", () => {
     const callsWhenLeaving = scrollBy.mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 600)); // three scroll intervals
     expect(scrollBy.mock.calls.length).toBe(callsWhenLeaving);
+  });
+});
+
+describe("TabViewPage deleting", () => {
+  function renderAt() {
+    return render(
+      <MemoryRouter initialEntries={["/tabs/t1"]}>
+        <Routes>
+          <Route path="/tabs/:tabId" element={<TabViewPage />} />
+          <Route path="/users/:username" element={<p>Profile page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("lets the owner delete the tab after confirming, then shows their tabs", async () => {
+    auth.current = { user: { id: "u1", username: "earl" } };
+    const user = userEvent.setup();
+    renderAt();
+
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    expect(screen.getByText(/delete this tab\? this can't be undone/i)).toBeInTheDocument();
+    expect(api.remove).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /yes, delete/i }));
+    expect(api.remove).toHaveBeenCalledWith("t1");
+    expect(await screen.findByText("Profile page")).toBeInTheDocument();
+  });
+
+  it("can be cancelled", async () => {
+    auth.current = { user: { id: "u1", username: "earl" } };
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByText(/delete this tab\?/i)).not.toBeInTheDocument();
+    expect(api.remove).not.toHaveBeenCalled();
+  });
+
+  it("isn't offered to anyone but the owner", async () => {
+    auth.current = { user: { id: "someone-else", username: "ralph" } };
+    renderAt();
+    await screen.findByRole("heading", { name: "Cripple Creek" });
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 });
