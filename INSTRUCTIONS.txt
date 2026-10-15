@@ -1,5 +1,5 @@
 ================================================================================
-                           BANJO TABS - HOW TO RUN
+                           BANJO BONANZA JAMBOREE - HOW TO RUN
 ================================================================================
 
 This project consists of two parts:
@@ -64,7 +64,7 @@ DETAILED STEP-BY-STEP INSTRUCTIONS
      Edit `backend/.env` with your settings. A minimal development setup:
        ENVIRONMENT=development
        DEBUG=true
-       DATABASE_URL=sqlite+aiosqlite:///./banjo_tabs.db
+       DATABASE_URL=sqlite+aiosqlite:///./banjo_bonanza_jamboree.db
        JWT_SECRET_KEY=generate_a_random_32_byte_hex_or_string_here
        JWT_ALGORITHM=HS256
        ACCESS_TOKEN_EXPIRE_MINUTES=60
@@ -73,7 +73,7 @@ DETAILED STEP-BY-STEP INSTRUCTIONS
        GOOGLE_CLIENT_SECRET=
        GOOGLE_REDIRECT_URI=http://localhost:5173/auth/google/callback
        CORS_ORIGINS=http://localhost:5173
-       APP_NAME=Banjo Tabs
+       APP_NAME=Banjo Bonanza Jamboree
 
      Note:
      - With `ENVIRONMENT=development` and SQLite, database tables are

@@ -62,8 +62,8 @@ class Settings:
     debug: bool = _env("DEBUG", "false").lower() == "true"
 
     # --- Database ---
-    # Example: postgresql+asyncpg://user:password@host:5432/banjo_tabs
-    database_url: str = normalize_database_url(_env("DATABASE_URL", "sqlite+aiosqlite:///./banjo_tabs.db"))
+    # Example: postgresql+asyncpg://user:password@host:5432/banjo_bonanza_jamboree
+    database_url: str = normalize_database_url(_env("DATABASE_URL", "sqlite+aiosqlite:///./banjo_bonanza_jamboree.db"))
 
     # --- Auth / JWT ---
     jwt_secret_key: str = _env("JWT_SECRET_KEY")

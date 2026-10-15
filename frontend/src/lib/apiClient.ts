@@ -13,8 +13,29 @@ import type { ApiError, TokenResponse } from "../types/api";
 // `||` (not `??`) so a blank value, e.g. copied from .env.example, falls back too.
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-const ACCESS_TOKEN_KEY = "banjo_tabs_access_token";
-const REFRESH_TOKEN_KEY = "banjo_tabs_refresh_token";
+const ACCESS_TOKEN_KEY = "bbj_access_token";
+const REFRESH_TOKEN_KEY = "bbj_refresh_token";
+
+// Logins saved under the app's old name ("Banjo Tabs") move to the current
+// keys the first time the app loads, so nobody is logged out by the rename.
+const LEGACY_TOKEN_KEYS: [string, string][] = [
+  ["banjo_tabs_access_token", ACCESS_TOKEN_KEY],
+  ["banjo_tabs_refresh_token", REFRESH_TOKEN_KEY],
+];
+
+export function migrateLegacyTokens(): void {
+  try {
+    for (const [oldKey, newKey] of LEGACY_TOKEN_KEYS) {
+      const value = localStorage.getItem(oldKey);
+      if (value === null) continue;
+      if (localStorage.getItem(newKey) === null) localStorage.setItem(newKey, value);
+      localStorage.removeItem(oldKey);
+    }
+  } catch {
+    // Storage blocked (e.g. some private modes): there's nothing to move.
+  }
+}
+migrateLegacyTokens();
 
 export class ApiRequestError extends Error {
   status: number;

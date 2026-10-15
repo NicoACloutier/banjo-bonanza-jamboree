@@ -28,7 +28,7 @@ def test_normalizes_hosted_postgres_urls_for_asyncpg():
 def test_leaves_other_urls_alone():
     for url in [
         "postgresql+asyncpg://u:p@host/db?ssl=require",
-        "sqlite+aiosqlite:///./banjo_tabs.db",
+        "sqlite+aiosqlite:///./banjo_bonanza_jamboree.db",
         "sqlite+aiosqlite:///:memory:",
     ]:
         assert normalize_database_url(url) == url

@@ -69,7 +69,7 @@ export function HomePage() {
   return (
     <div>
       <div className="panel">
-        <h1>Browse Banjo Tabs</h1>
+        <h1>Browse Tabs</h1>
         <SearchBar initialQuery={filters.q ?? ""} onSearch={(q) => setFilter("q", q)} />
         <div className="form-row browse-filters">
           <label>
