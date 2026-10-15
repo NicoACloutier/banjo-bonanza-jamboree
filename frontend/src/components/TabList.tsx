@@ -11,7 +11,7 @@ import type { TabSummary } from "../types/api";
 
 interface TabListProps {
   tabs: TabSummary[];
-  emptyMessage: string;
+  emptyMessage: ReactNode;
   /** Hide the "by <owner>" line (e.g. on that owner's own profile). */
   showOwner?: boolean;
   renderActions?: (tab: TabSummary, index: number) => ReactNode;

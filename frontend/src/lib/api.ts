@@ -44,7 +44,7 @@ export const TabsApi = {
     apiRequest<TabDetail>("/api/tabs", { method: "POST", body: payload }),
   update: (id: string, payload: TabUpdateRequest) =>
     apiRequest<TabDetail>(`/api/tabs/${id}`, { method: "PUT", body: payload }),
-  get: (id: string) => apiRequest<TabDetail>(`/api/tabs/${id}`, { auth: false }),
+  get: (id: string) => apiRequest<TabDetail>(`/api/tabs/${id}`),
   remove: (id: string) => apiRequest<void>(`/api/tabs/${id}`, { method: "DELETE" }),
   search: (filters: TabSearchFilters, page: number, pageSize: number) =>
     apiRequest<TabListResponse>("/api/tabs", { query: { ...filters, page, page_size: pageSize }, auth: false }),
@@ -75,6 +75,5 @@ export const UsersApi = {
   tabs: (username: string, page: number, pageSize: number) =>
     apiRequest<TabListResponse>(`/api/users/${username}/tabs`, {
       query: { page, page_size: pageSize },
-      auth: false,
     }),
 };

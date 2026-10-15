@@ -94,11 +94,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   let response = await doFetch();
 
-  if (response.status === 401 && auth && getRefreshToken()) {
-    const refreshed = await tryRefreshAccessToken();
-    if (refreshed) {
-      response = await doFetch();
-    }
+  if (response.status === 401 && auth && getAccessToken()) {
+    // The stored token was rejected (usually expired): refresh it and retry. If
+    // that's impossible, drop the dead tokens and retry anonymously, so public
+    // pages still load and endpoints that need an account fail as usual.
+    if (!(await tryRefreshAccessToken())) clearTokens();
+    response = await doFetch();
   }
 
   if (!response.ok) {

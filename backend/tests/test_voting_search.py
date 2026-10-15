@@ -96,6 +96,28 @@ async def test_user_tabs_endpoint_hides_drafts_from_others(client):
     assert owner_view.json()["total"] == 2
 
 
+async def test_expired_or_bad_token_on_public_endpoint_is_rejected_not_ignored(client):
+    # A stale token gets a 401 (so the client refreshes it) instead of being
+    # quietly treated as anonymous, which hid the owner's drafts.
+    from datetime import datetime, timedelta, timezone
+
+    import jwt
+
+    from app.core.security import settings
+
+    owner = await _register_and_login(client, "staletoken")
+    user_id = (await client.get("/api/auth/me", headers=owner)).json()["id"]
+    expired = jwt.encode(
+        {"sub": user_id, "type": "access", "exp": datetime.now(timezone.utc) - timedelta(minutes=1)},
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+    for token in [expired, "not-a-jwt"]:
+        resp = await client.get("/api/users/staletoken/tabs", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 401
+    assert (await client.get("/api/users/staletoken/tabs")).status_code == 200
+
+
 async def test_update_tab_response_reflects_callers_existing_vote(client):
     # Regression test: PUT /api/tabs/{id} used to hardcode has_voted=False
     # in its response regardless of the editing user's actual vote state.

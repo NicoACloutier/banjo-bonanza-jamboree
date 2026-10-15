@@ -2,8 +2,8 @@
 FastAPI dependencies for authentication.
 
 `get_current_user` requires a valid access token.
-`get_optional_user` allows anonymous access (returns None if no/invalid
-token) -- used by endpoints that support both logged-in and anonymous
+`get_optional_user` allows anonymous access (returns None if there's no
+token, but rejects an invalid or expired one so the client refreshes it) -- used by endpoints that support both logged-in and anonymous
 users (browsing, playback): anyone can view and play tabs, but creating,
 editing, voting and the library features require an account.
 """
@@ -40,8 +40,15 @@ async def get_optional_user(
         return None
     try:
         payload = decode_access_token(token)
-    except jwt.PyJWTError:
-        return None
+    except jwt.PyJWTError as exc:
+        # Answer a bad (usually expired) token with 401 rather than treating the
+        # request as anonymous, so the client refreshes it; otherwise an owner
+        # would silently stop seeing their own drafts once the token expired.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
     user_id = payload.get("sub")
     if not user_id:
         return None
