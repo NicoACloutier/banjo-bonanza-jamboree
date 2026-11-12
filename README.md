@@ -3,6 +3,8 @@
 A full-stack web app for creating, browsing, and playing back 5-string banjo
 tablature, with an added tuner.
 
+![A sample page from the website](demo_screenshot.png)
+
 ## Features
 
 - **Tab editor**: add notes one at a time (pick a string, type/click a fret
